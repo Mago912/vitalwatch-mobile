@@ -17,6 +17,8 @@ const MAPPING = {
   'house.fill': 'home',
   'heart.fill': 'favorite',
   'chart.line.uptrend.xyaxis': 'show-chart',
+  'pills.fill': 'medication',
+  'gearshape.fill': 'settings',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',

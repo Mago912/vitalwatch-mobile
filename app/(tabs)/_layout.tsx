@@ -32,6 +32,20 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="medication"
+        options={{
+          title: 'Medicacion',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="pills.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Config',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

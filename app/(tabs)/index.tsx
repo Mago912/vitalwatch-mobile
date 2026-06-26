@@ -1,363 +1,283 @@
-import * as Haptics from 'expo-haptics';
-import { ScrollView, StyleSheet, Text, Pressable, useColorScheme, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-const metrics = [
-  {
-    label: 'Ritmo cardiaco',
-    value: '76',
-    unit: 'lpm',
-    status: 'Normal',
-    accent: '#0E9F6E',
-  },
-  {
-    label: 'Oxigeno',
-    value: '98',
-    unit: '%',
-    status: 'Optimo',
-    accent: '#0A7EA4',
-  },
-  {
-    label: 'Temperatura',
-    value: '36.7',
-    unit: 'C',
-    status: 'Estable',
-    accent: '#D97706',
-  },
-  {
-    label: 'Presion',
-    value: '118/76',
-    unit: 'mmHg',
-    status: 'Controlada',
-    accent: '#7C3AED',
-  },
-];
-
-const alerts = [
-  'Sin alertas criticas en las ultimas 24 horas.',
-  'Proxima lectura automatica en 12 minutos.',
-];
+import { appColors, statusStyles } from '@/constants/vitalwatch';
+import { useVitalWatch } from '@/providers/vitalwatch-provider';
 
 export default function HomeScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const palette = isDark ? darkPalette : lightPalette;
+  const {
+    activateFall,
+    activateLowBattery,
+    activateMedicationReminder,
+    activateNormal,
+    activateSos,
+    battery,
+    history,
+    lastUpdated,
+    notificationPermission,
+    profile,
+    status,
+  } = useVitalWatch();
 
-  const handleEmergencyPress = () => {
-    if (process.env.EXPO_OS === 'ios') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    }
-  };
+  const currentStatus = statusStyles[status];
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      style={[styles.screen, { backgroundColor: palette.background }]}
+      style={styles.screen}
       contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={[styles.eyebrow, { color: palette.muted }]}>VitalWatch</Text>
-          <Text style={[styles.title, { color: palette.text }]}>Monitoreo en vivo</Text>
-          <Text style={[styles.subtitle, { color: palette.muted }]}>
-            Ultima sincronizacion: hoy, 09:42
+      <View>
+        <Text style={styles.appName}>VitalWatch</Text>
+        <Text style={styles.title}>Panel principal</Text>
+        <Text style={styles.subtitle}>Adulto mayor: {profile.elderName}</Text>
+      </View>
+
+      <View style={[styles.statusCard, { backgroundColor: currentStatus.softColor }]}>
+        <Text style={[styles.statusLabel, { color: currentStatus.text }]}>Estado actual</Text>
+        <Text style={[styles.statusTitle, { color: currentStatus.color }]}>{status}</Text>
+        <Text style={[styles.statusDescription, { color: currentStatus.text }]}>
+          {currentStatus.description}
+        </Text>
+      </View>
+
+      <View style={styles.infoGrid}>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoLabel}>Bateria pulsera</Text>
+          <Text style={styles.infoValue}>{battery}%</Text>
+          <View style={styles.batteryTrack}>
+            <View
+              style={[
+                styles.batteryFill,
+                {
+                  width: `${battery}%`,
+                  backgroundColor: battery <= 20 ? appColors.danger : currentStatus.color,
+                },
+              ]}
+            />
+          </View>
+        </View>
+
+        <View style={styles.infoCard}>
+          <Text style={styles.infoLabel}>Ultima actualizacion</Text>
+          <Text style={styles.infoValueSmall}>{lastUpdated}</Text>
+          <Text style={styles.permissionText}>
+            Notificaciones: {notificationPermission ? 'activas' : 'sin permiso'}
           </Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: palette.successSoft }]}>
-          <View style={[styles.statusDot, { backgroundColor: palette.success }]} />
-          <Text style={[styles.statusText, { color: palette.success }]}>Estable</Text>
-        </View>
       </View>
 
-      <View style={[styles.heroCard, { backgroundColor: palette.primary }]}>
-        <Text style={styles.heroLabel}>Estado general</Text>
-        <Text style={styles.heroTitle}>Todo se ve bien</Text>
-        <Text style={styles.heroCopy}>
-          Los signos vitales estan dentro del rango esperado. Mantener seguimiento continuo.
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Simular eventos</Text>
+        <Text style={styles.sectionHelp}>
+          Estos botones imitan lo que mas adelante enviara la pulsera con ESP32.
         </Text>
-        <View style={styles.heroFooter}>
-          <View>
-            <Text style={styles.heroMetric}>4/4</Text>
-            <Text style={styles.heroMetricLabel}>metricas normales</Text>
-          </View>
-          <View style={styles.signalPills}>
-            <View style={styles.signalPill} />
-            <View style={styles.signalPill} />
-            <View style={styles.signalPillDim} />
-          </View>
+
+        <View style={styles.buttonGrid}>
+          <ActionButton color="#0E9F6E" label="Estado normal" onPress={activateNormal} />
+          <ActionButton color="#EA580C" label="Simular caida" onPress={activateFall} />
+          <ActionButton color="#DC2626" label="Activar SOS" onPress={activateSos} />
+          <ActionButton color="#F59E0B" label="Bateria baja" onPress={activateLowBattery} />
+          <ActionButton
+            color="#6D28D9"
+            label="Medicacion pendiente"
+            onPress={activateMedicationReminder}
+          />
         </View>
       </View>
 
-      <View style={styles.grid}>
-        {metrics.map((metric) => (
-          <View
-            key={metric.label}
-            style={[
-              styles.metricCard,
-              {
-                backgroundColor: palette.card,
-                borderColor: palette.border,
-                boxShadow: palette.cardShadow,
-              },
-            ]}>
-            <View style={[styles.metricAccent, { backgroundColor: metric.accent }]} />
-            <Text style={[styles.metricLabel, { color: palette.muted }]}>{metric.label}</Text>
-            <View style={styles.metricValueRow}>
-              <Text style={[styles.metricValue, { color: palette.text }]}>{metric.value}</Text>
-              <Text style={[styles.metricUnit, { color: palette.muted }]}>{metric.unit}</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Ultimos eventos</Text>
+        {history.slice(0, 3).map((event) => (
+          <View key={event.id} style={styles.eventRow}>
+            <View style={styles.eventDot} />
+            <View style={styles.eventTextBox}>
+              <Text style={styles.eventType}>{event.type}</Text>
+              <Text style={styles.eventDescription}>{event.description}</Text>
+              <Text style={styles.eventDate}>{event.date}</Text>
             </View>
-            <Text style={[styles.metricStatus, { color: metric.accent }]}>{metric.status}</Text>
           </View>
         ))}
       </View>
-
-      <View style={[styles.section, { backgroundColor: palette.card, borderColor: palette.border }]}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: palette.text }]}>Alertas recientes</Text>
-          <Text style={[styles.sectionAction, { color: palette.primary }]}>Ver todo</Text>
-        </View>
-        {alerts.map((alert) => (
-          <View key={alert} style={[styles.alertRow, { borderColor: palette.border }]}>
-            <View style={[styles.alertDot, { backgroundColor: palette.success }]} />
-            <Text style={[styles.alertText, { color: palette.text }]}>{alert}</Text>
-          </View>
-        ))}
-      </View>
-
-      <Pressable
-        onPress={handleEmergencyPress}
-        style={({ pressed }) => [
-          styles.emergencyButton,
-          { backgroundColor: pressed ? '#B91C1C' : '#DC2626' },
-        ]}>
-        <Text style={styles.emergencyText}>Enviar alerta de emergencia</Text>
-      </Pressable>
     </ScrollView>
   );
 }
 
-const lightPalette = {
-  background: '#F6FAFB',
-  card: '#FFFFFF',
-  text: '#102027',
-  muted: '#64748B',
-  border: '#E2E8F0',
-  primary: '#0A7EA4',
-  success: '#0E9F6E',
-  successSoft: '#DCFCE7',
-  cardShadow: '0 10px 24px rgba(15, 23, 42, 0.08)',
-};
-
-const darkPalette = {
-  background: '#0B1417',
-  card: '#132226',
-  text: '#F8FAFC',
-  muted: '#A7B6C2',
-  border: '#24383E',
-  primary: '#0F9CC4',
-  success: '#34D399',
-  successSoft: '#063D2D',
-  cardShadow: '0 10px 24px rgba(0, 0, 0, 0.25)',
-};
+function ActionButton({
+  color,
+  label,
+  onPress,
+}: {
+  color: string;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.actionButton,
+        {
+          backgroundColor: pressed ? '#334155' : color,
+        },
+      ]}>
+      <Text style={styles.actionButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    backgroundColor: appColors.background,
   },
   content: {
     padding: 20,
-    paddingBottom: 116,
+    paddingBottom: 120,
     gap: 18,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  headerText: {
-    flex: 1,
-    gap: 4,
-  },
-  eyebrow: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
+  appName: {
+    color: appColors.primary,
+    fontSize: 16,
+    fontWeight: '800',
   },
   title: {
-    fontSize: 30,
-    fontWeight: '800',
-    lineHeight: 34,
+    color: appColors.text,
+    fontSize: 32,
+    fontWeight: '900',
   },
   subtitle: {
-    fontSize: 15,
-    lineHeight: 21,
+    color: appColors.muted,
+    fontSize: 17,
+    marginTop: 4,
   },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  heroCard: {
-    borderRadius: 28,
+  statusCard: {
+    borderRadius: 26,
     padding: 22,
-    gap: 10,
+    gap: 8,
     borderCurve: 'continuous',
   },
-  heroLabel: {
-    color: 'rgba(255, 255, 255, 0.78)',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 28,
+  statusLabel: {
+    fontSize: 16,
     fontWeight: '800',
-    lineHeight: 32,
   },
-  heroCopy: {
-    color: 'rgba(255, 255, 255, 0.84)',
-    fontSize: 15,
-    lineHeight: 22,
+  statusTitle: {
+    fontSize: 34,
+    fontWeight: '900',
   },
-  heroFooter: {
+  statusDescription: {
+    fontSize: 17,
+    lineHeight: 24,
+  },
+  infoGrid: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    paddingTop: 8,
-  },
-  heroMetric: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '800',
-    fontVariant: ['tabular-nums'],
-  },
-  heroMetricLabel: {
-    color: 'rgba(255, 255, 255, 0.72)',
-    fontSize: 13,
-  },
-  signalPills: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 5,
-  },
-  signalPill: {
-    width: 9,
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: '#FFFFFF',
-  },
-  signalPillDim: {
-    width: 9,
-    height: 18,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.38)',
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 12,
   },
-  metricCard: {
-    flexBasis: '47%',
-    flexGrow: 1,
-    minWidth: 150,
-    borderWidth: 1,
+  infoCard: {
+    flex: 1,
+    backgroundColor: appColors.card,
+    borderColor: appColors.border,
     borderRadius: 22,
+    borderWidth: 1,
     padding: 16,
     gap: 8,
     borderCurve: 'continuous',
   },
-  metricAccent: {
-    width: 34,
-    height: 5,
-    borderRadius: 999,
-  },
-  metricLabel: {
+  infoLabel: {
+    color: appColors.muted,
     fontSize: 14,
-    fontWeight: '700',
-  },
-  metricValueRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  metricValue: {
-    fontSize: 28,
     fontWeight: '800',
-    lineHeight: 32,
+  },
+  infoValue: {
+    color: appColors.text,
+    fontSize: 30,
+    fontWeight: '900',
     fontVariant: ['tabular-nums'],
   },
-  metricUnit: {
-    fontSize: 13,
-    fontWeight: '700',
-    paddingBottom: 3,
+  infoValueSmall: {
+    color: appColors.text,
+    fontSize: 18,
+    fontWeight: '900',
   },
-  metricStatus: {
+  batteryTrack: {
+    height: 10,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  batteryFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  permissionText: {
+    color: appColors.muted,
     fontSize: 13,
-    fontWeight: '800',
   },
   section: {
-    borderWidth: 1,
+    backgroundColor: appColors.card,
+    borderColor: appColors.border,
     borderRadius: 24,
+    borderWidth: 1,
     padding: 18,
     gap: 12,
     borderCurve: 'continuous',
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
   sectionTitle: {
-    fontSize: 19,
-    fontWeight: '800',
+    color: appColors.text,
+    fontSize: 21,
+    fontWeight: '900',
   },
-  sectionAction: {
-    fontSize: 14,
-    fontWeight: '800',
+  sectionHelp: {
+    color: appColors.muted,
+    fontSize: 15,
+    lineHeight: 22,
   },
-  alertRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    paddingTop: 12,
+  buttonGrid: {
     gap: 10,
   },
-  alertDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 999,
-  },
-  alertText: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  emergencyButton: {
-    minHeight: 56,
+  actionButton: {
+    minHeight: 58,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
+    padding: 14,
     borderCurve: 'continuous',
   },
-  emergencyText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
+  actionButtonText: {
+    color: appColors.buttonText,
+    fontSize: 17,
+    fontWeight: '900',
     textAlign: 'center',
+  },
+  eventRow: {
+    flexDirection: 'row',
+    gap: 12,
+    borderTopColor: appColors.border,
+    borderTopWidth: 1,
+    paddingTop: 12,
+  },
+  eventDot: {
+    width: 11,
+    height: 11,
+    borderRadius: 999,
+    backgroundColor: appColors.primary,
+    marginTop: 6,
+  },
+  eventTextBox: {
+    flex: 1,
+    gap: 2,
+  },
+  eventType: {
+    color: appColors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  eventDescription: {
+    color: appColors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  eventDate: {
+    color: appColors.muted,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
