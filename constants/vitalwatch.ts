@@ -15,6 +15,7 @@ export type EventItem = {
 export type Medication = {
   id: string;
   name: string;
+  dose: string;
   time: string;
   status: 'Pendiente' | 'Tomado';
 };
@@ -23,6 +24,12 @@ export type UserProfile = {
   elderName: string;
   contactName: string;
   contactInfo: string;
+};
+
+export type DeviceConnection = {
+  deviceName: string;
+  connectionMode: 'Simulacion' | 'WiFi' | 'Bluetooth' | 'API';
+  endpoint: string;
 };
 
 export type VitalTrend = 'sube' | 'baja' | 'estable';
@@ -47,16 +54,24 @@ export const initialMedications: Medication[] = [
   {
     id: 'med-1',
     name: 'Losartan 50 mg',
+    dose: '1 comprimido',
     time: '09:00',
     status: 'Pendiente',
   },
   {
     id: 'med-2',
     name: 'Vitamina D',
+    dose: '1 capsula',
     time: '13:00',
     status: 'Pendiente',
   },
 ];
+
+export const initialDeviceConnection: DeviceConnection = {
+  deviceName: 'Pulsera VitalWatch ESP32',
+  connectionMode: 'Simulacion',
+  endpoint: 'http://192.168.4.1/estado',
+};
 
 export const initialHistory: EventItem[] = [
   {

@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { EventItem, Medication, UserProfile } from '@/constants/vitalwatch';
+import type { DeviceConnection, EventItem, Medication, UserProfile } from '@/constants/vitalwatch';
 
 const PROFILE_KEY = 'vitalwatch.profile';
 const MEDICATIONS_KEY = 'vitalwatch.medications';
 const HISTORY_KEY = 'vitalwatch.history';
+const DEVICE_CONNECTION_KEY = 'vitalwatch.deviceConnection';
 
 // Lee un valor guardado. Si no existe o hay error, devuelve el valor inicial.
 async function loadJson<T>(key: string, fallback: T): Promise<T> {
@@ -42,4 +43,12 @@ export function loadHistory(fallback: EventItem[]) {
 
 export function saveHistory(history: EventItem[]) {
   return saveJson(HISTORY_KEY, history);
+}
+
+export function loadDeviceConnection(fallback: DeviceConnection) {
+  return loadJson(DEVICE_CONNECTION_KEY, fallback);
+}
+
+export function saveDeviceConnection(deviceConnection: DeviceConnection) {
+  return saveJson(DEVICE_CONNECTION_KEY, deviceConnection);
 }

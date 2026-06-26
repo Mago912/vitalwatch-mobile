@@ -1,7 +1,9 @@
 import React, { createContext, PropsWithChildren, useEffect, useMemo, useState } from 'react';
 
 import {
+  DeviceConnection,
   EventItem,
+  initialDeviceConnection,
   initialHistory,
   initialMedications,
   initialProfile,
@@ -13,9 +15,11 @@ import {
 } from '@/constants/vitalwatch';
 import { showLocalNotification, requestNotificationPermissions } from '@/lib/vitalwatch-notifications';
 import {
+  loadDeviceConnection,
   loadHistory,
   loadMedications,
   loadProfile,
+  saveDeviceConnection,
   saveHistory,
   saveMedications,
   saveProfile,
@@ -23,6 +27,7 @@ import {
 
 type VitalWatchContextValue = {
   battery: number;
+  deviceConnection: DeviceConnection;
   history: EventItem[];
   lastUpdated: string;
   medications: Medication[];
@@ -35,7 +40,12 @@ type VitalWatchContextValue = {
   activateMedicationReminder: () => void;
   activateNormal: () => void;
   activateSos: () => void;
+  addMedication: (medication: Omit<Medication, 'id' | 'status'>) => void;
+  deleteMedication: (id: string) => void;
   markMedicationTaken: (id: string) => void;
+  markMedicationPending: (id: string) => void;
+  updateDeviceConnection: (deviceConnection: DeviceConnection) => void;
+  updateMedication: (medication: Medication) => void;
   updateProfile: (profile: UserProfile) => void;
 };
 
@@ -131,6 +141,7 @@ function simulateVitalSigns(status: WatchStatus, previousVitals: VitalSigns): Vi
 
 export function VitalWatchProvider({ children }: PropsWithChildren) {
   const [battery, setBattery] = useState(86);
+  const [deviceConnection, setDeviceConnection] = useState<DeviceConnection>(initialDeviceConnection);
   const [history, setHistory] = useState<EventItem[]>(initialHistory);
   const [lastUpdated, setLastUpdated] = useState(formatDateTime());
   const [medications, setMedications] = useState<Medication[]>(initialMedications);
@@ -141,15 +152,17 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     async function prepareApp() {
-      const [savedProfile, savedMedications, savedHistory] = await Promise.all([
+      const [savedProfile, savedMedications, savedHistory, savedDeviceConnection] = await Promise.all([
         loadProfile(initialProfile),
         loadMedications(initialMedications),
         loadHistory(initialHistory),
+        loadDeviceConnection(initialDeviceConnection),
       ]);
 
       setProfile(savedProfile);
       setMedications(savedMedications);
       setHistory(savedHistory);
+      setDeviceConnection(savedDeviceConnection);
 
       const permissionWasGranted = await requestNotificationPermissions();
       setNotificationPermission(permissionWasGranted);
@@ -219,6 +232,38 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
     showLocalNotification('Recordatorio de medicacion', 'Hay una medicacion pendiente.');
   }
 
+  function addMedication(medication: Omit<Medication, 'id' | 'status'>) {
+    const newMedication: Medication = {
+      ...medication,
+      id: `med-${Date.now()}`,
+      status: 'Pendiente',
+    };
+
+    const updatedMedications = [...medications, newMedication];
+    setMedications(updatedMedications);
+    saveMedications(updatedMedications);
+    addHistoryEvent('Medicacion agregada', `Se agrego ${newMedication.name}.`);
+  }
+
+  function updateMedication(updatedMedication: Medication) {
+    const updatedMedications = medications.map((medication) =>
+      medication.id === updatedMedication.id ? updatedMedication : medication
+    );
+
+    setMedications(updatedMedications);
+    saveMedications(updatedMedications);
+    addHistoryEvent('Medicacion editada', `Se actualizo ${updatedMedication.name}.`);
+  }
+
+  function deleteMedication(id: string) {
+    const medicationToDelete = medications.find((medication) => medication.id === id);
+    const updatedMedications = medications.filter((medication) => medication.id !== id);
+
+    setMedications(updatedMedications);
+    saveMedications(updatedMedications);
+    addHistoryEvent('Medicacion eliminada', `Se elimino ${medicationToDelete?.name ?? 'un medicamento'}.`);
+  }
+
   function markMedicationTaken(id: string) {
     const updatedMedications = medications.map((medication) =>
       medication.id === id ? { ...medication, status: 'Tomado' as const } : medication
@@ -229,15 +274,32 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
     addHistoryEvent('Medicacion tomada', 'Medicacion marcada como tomada.');
   }
 
+  function markMedicationPending(id: string) {
+    const updatedMedications = medications.map((medication) =>
+      medication.id === id ? { ...medication, status: 'Pendiente' as const } : medication
+    );
+
+    setMedications(updatedMedications);
+    saveMedications(updatedMedications);
+    addHistoryEvent('Medicacion pendiente', 'Medicacion marcada nuevamente como pendiente.');
+  }
+
   function updateProfile(nextProfile: UserProfile) {
     setProfile(nextProfile);
     saveProfile(nextProfile);
     addHistoryEvent('Configuracion', 'Datos de usuario/contacto actualizados.');
   }
 
+  function updateDeviceConnection(nextDeviceConnection: DeviceConnection) {
+    setDeviceConnection(nextDeviceConnection);
+    saveDeviceConnection(nextDeviceConnection);
+    addHistoryEvent('ESP32', 'Configuracion de conexion futura actualizada.');
+  }
+
   const value = useMemo(
     () => ({
       battery,
+      deviceConnection,
       history,
       lastUpdated,
       medications,
@@ -250,10 +312,25 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
       activateMedicationReminder,
       activateNormal,
       activateSos,
+      addMedication,
+      deleteMedication,
       markMedicationTaken,
+      markMedicationPending,
+      updateDeviceConnection,
+      updateMedication,
       updateProfile,
     }),
-    [battery, history, lastUpdated, medications, notificationPermission, profile, status, vitals]
+    [
+      battery,
+      deviceConnection,
+      history,
+      lastUpdated,
+      medications,
+      notificationPermission,
+      profile,
+      status,
+      vitals,
+    ]
   );
 
   return <VitalWatchContext.Provider value={value}>{children}</VitalWatchContext.Provider>;

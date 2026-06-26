@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { appColors } from '@/constants/vitalwatch';
+import { appColors, DeviceConnection } from '@/constants/vitalwatch';
 import { useVitalWatch } from '@/providers/vitalwatch-provider';
 
+const connectionModes: DeviceConnection['connectionMode'][] = ['Simulacion', 'WiFi', 'Bluetooth', 'API'];
+
 export default function SettingsScreen() {
-  const { profile, updateProfile } = useVitalWatch();
+  const { deviceConnection, profile, updateDeviceConnection, updateProfile } = useVitalWatch();
   const [elderName, setElderName] = useState(profile.elderName);
   const [contactName, setContactName] = useState(profile.contactName);
   const [contactInfo, setContactInfo] = useState(profile.contactInfo);
+  const [deviceName, setDeviceName] = useState(deviceConnection.deviceName);
+  const [connectionMode, setConnectionMode] =
+    useState<DeviceConnection['connectionMode']>(deviceConnection.connectionMode);
+  const [endpoint, setEndpoint] = useState(deviceConnection.endpoint);
 
   useEffect(() => {
     setElderName(profile.elderName);
@@ -16,11 +22,25 @@ export default function SettingsScreen() {
     setContactInfo(profile.contactInfo);
   }, [profile]);
 
+  useEffect(() => {
+    setDeviceName(deviceConnection.deviceName);
+    setConnectionMode(deviceConnection.connectionMode);
+    setEndpoint(deviceConnection.endpoint);
+  }, [deviceConnection]);
+
   function handleSave() {
     updateProfile({
       elderName,
       contactName,
       contactInfo,
+    });
+  }
+
+  function handleSaveDeviceConnection() {
+    updateDeviceConnection({
+      deviceName,
+      connectionMode,
+      endpoint,
     });
   }
 
@@ -62,6 +82,57 @@ export default function SettingsScreen() {
             { backgroundColor: pressed ? '#075985' : appColors.primary },
           ]}>
           <Text style={styles.saveButtonText}>Guardar cambios</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Pulsera y ESP32</Text>
+        <Text style={styles.sectionHelp}>
+          Esta configuracion todavia es simulada. Sirve para dejar preparada la app para WiFi,
+          Bluetooth o una API cuando el hardware este listo.
+        </Text>
+
+        <InputField
+          label="Nombre del dispositivo"
+          value={deviceName}
+          onChangeText={setDeviceName}
+          placeholder="Ej: Pulsera VitalWatch ESP32"
+        />
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Modo de conexion futura</Text>
+          <View style={styles.modeGrid}>
+            {connectionModes.map((mode) => {
+              const isSelected = connectionMode === mode;
+
+              return (
+                <Pressable
+                  key={mode}
+                  onPress={() => setConnectionMode(mode)}
+                  style={[styles.modeButton, isSelected ? styles.modeButtonActive : undefined]}>
+                  <Text style={[styles.modeText, isSelected ? styles.modeTextActive : undefined]}>
+                    {mode}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <InputField
+          label="IP o URL simulada"
+          value={endpoint}
+          onChangeText={setEndpoint}
+          placeholder="Ej: http://192.168.4.1/estado"
+        />
+
+        <Pressable
+          onPress={handleSaveDeviceConnection}
+          style={({ pressed }) => [
+            styles.saveButton,
+            { backgroundColor: pressed ? '#075985' : appColors.primary },
+          ]}>
+          <Text style={styles.saveButtonText}>Guardar datos de pulsera</Text>
         </Pressable>
       </View>
 
@@ -135,6 +206,16 @@ const styles = StyleSheet.create({
     gap: 16,
     borderCurve: 'continuous',
   },
+  sectionTitle: {
+    color: appColors.text,
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  sectionHelp: {
+    color: appColors.muted,
+    fontSize: 15,
+    lineHeight: 22,
+  },
   inputGroup: {
     gap: 8,
   },
@@ -152,6 +233,34 @@ const styles = StyleSheet.create({
     fontSize: 17,
     minHeight: 54,
     paddingHorizontal: 14,
+  },
+  modeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  modeButton: {
+    backgroundColor: '#F8FAFC',
+    borderColor: appColors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderCurve: 'continuous',
+  },
+  modeButtonActive: {
+    backgroundColor: '#E0F2FE',
+    borderColor: appColors.primary,
+  },
+  modeText: {
+    color: appColors.muted,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  modeTextActive: {
+    color: '#075985',
   },
   saveButton: {
     minHeight: 58,
