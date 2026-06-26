@@ -25,6 +25,18 @@ export type UserProfile = {
   contactInfo: string;
 };
 
+export type VitalTrend = 'sube' | 'baja' | 'estable';
+
+export type VitalSigns = {
+  heartRate: number;
+  oxygen: number;
+  temperature: number;
+  systolicPressure: number;
+  diastolicPressure: number;
+  movement: 'Reposo' | 'Leve' | 'Activo' | 'Caida';
+  trend: VitalTrend;
+};
+
 export const initialProfile: UserProfile = {
   elderName: 'Alicia Gomez',
   contactName: 'Mariana Gomez',
@@ -54,6 +66,16 @@ export const initialHistory: EventItem[] = [
     date: 'Hoy',
   },
 ];
+
+export const initialVitalSigns: VitalSigns = {
+  heartRate: 76,
+  oxygen: 98,
+  temperature: 36.7,
+  systolicPressure: 118,
+  diastolicPressure: 76,
+  movement: 'Reposo',
+  trend: 'estable',
+};
 
 export const statusStyles: Record<
   WatchStatus,
