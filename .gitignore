@@ -17,6 +17,8 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*-firebase-adminsdk-*.json
+google-service-account-key*.json
 
 # Metro
 .metro-health-check*
@@ -32,6 +34,13 @@ yarn-error.*
 
 # local env files
 .env*.local
+esp32/**/vitalwatch_config.h
+esp32/**/build/
+.codex-remote-attachments/
+PAIRING_CODE.local.txt
+/.arduino/
+/.tools/
+/supabase/.temp/
 
 # typescript
 *.tsbuildinfo

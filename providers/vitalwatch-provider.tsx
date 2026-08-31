@@ -1,9 +1,13 @@
-import React, { createContext, PropsWithChildren, useEffect, useMemo, useState } from 'react';
+import React, { createContext, PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   DeviceConnection,
+  DeviceDisplayControl,
+  DeviceDisplayView,
+  deviceDisplayViews,
   EventItem,
   initialDeviceConnection,
+  initialDeviceDisplayControl,
   initialHistory,
   initialMedications,
   initialProfile,
@@ -13,7 +17,24 @@ import {
   VitalSigns,
   WatchStatus,
 } from '@/constants/vitalwatch';
-import { showLocalNotification, requestNotificationPermissions } from '@/lib/vitalwatch-notifications';
+import {
+  getExpoPushToken,
+  requestNotificationPermissions,
+  showLocalNotification,
+} from '@/lib/vitalwatch-notifications';
+import { registerDevicePushToken } from '@/lib/vitalwatch-push';
+import {
+  setRemoteDisplayEnabled,
+  setRemoteDisplayView,
+} from '@/lib/vitalwatch-device-control';
+import { DashboardEvent, fetchDashboardSnapshot } from '@/lib/vitalwatch-api';
+import {
+  createRemoteMedication,
+  deleteRemoteMedication,
+  fetchRemoteMedications,
+  setRemoteMedicationStatus,
+  updateRemoteMedication,
+} from '@/lib/vitalwatch-medications';
 import {
   loadDeviceConnection,
   loadHistory,
@@ -27,29 +48,49 @@ import {
 
 type VitalWatchContextValue = {
   battery: number;
+  dataSource: 'Simulacion' | 'Supabase';
   deviceConnection: DeviceConnection;
+  displayControl: DeviceDisplayControl;
+  displayControlMessage: string;
   history: EventItem[];
+  isSyncing: boolean;
+  isMedicationSyncing: boolean;
+  isDisplayControlSyncing: boolean;
   lastUpdated: string;
   medications: Medication[];
+  medicationSyncMessage: string;
   notificationPermission: boolean;
   profile: UserProfile;
+  pushNotificationMessage: string;
+  pushNotificationStatus: 'Pendientes' | 'Registrando' | 'Activas' | 'Error';
   status: WatchStatus;
+  syncError: string | null;
   vitals: VitalSigns;
   activateFall: () => void;
   activateLowBattery: () => void;
   activateMedicationReminder: () => void;
   activateNormal: () => void;
   activateSos: () => void;
-  addMedication: (medication: Omit<Medication, 'id' | 'status'>) => void;
-  deleteMedication: (id: string) => void;
-  markMedicationTaken: (id: string) => void;
-  markMedicationPending: (id: string) => void;
+  addMedication: (medication: Omit<Medication, 'id' | 'status'>) => Promise<boolean>;
+  deleteMedication: (id: string) => Promise<boolean>;
+  markMedicationTaken: (id: string) => Promise<boolean>;
+  markMedicationPending: (id: string) => Promise<boolean>;
+  refreshMedications: () => Promise<boolean>;
+  refreshRemoteData: () => Promise<void>;
+  retryPushNotifications: () => Promise<void>;
+  setDisplayEnabled: (enabled: boolean) => Promise<boolean>;
+  setDisplayView: (view: DeviceDisplayView) => Promise<boolean>;
   updateDeviceConnection: (deviceConnection: DeviceConnection) => void;
-  updateMedication: (medication: Medication) => void;
+  updateMedication: (medication: Medication) => Promise<boolean>;
   updateProfile: (profile: UserProfile) => void;
 };
 
 const VitalWatchContext = createContext<VitalWatchContextValue | null>(null);
+const REMOTE_REFRESH_MS = 15000;
+
+function getDisplayViewLabel(view: DeviceDisplayView) {
+  return deviceDisplayViews.find((option) => option.value === view)?.label ?? view;
+}
 
 function formatDateTime() {
   return new Date().toLocaleString('es-AR', {
@@ -59,6 +100,62 @@ function formatDateTime() {
     minute: '2-digit',
     second: '2-digit',
   });
+}
+
+function formatRemoteDateTime(value: string) {
+  return new Date(value).toLocaleString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function getRemoteStatus(events: DashboardEvent[], heartRate: number, oxygen: number): WatchStatus {
+  const latestEvent = events[0]?.type;
+
+  if (latestEvent === 'sos') {
+    return 'SOS';
+  }
+
+  if (latestEvent === 'fall_detected') {
+    return 'Caida detectada';
+  }
+
+  if (latestEvent === 'battery_low' || latestEvent === 'heart_rate_high' || latestEvent === 'spo2_low') {
+    return 'Alerta';
+  }
+
+  if (latestEvent === 'medication_pending') {
+    return 'Medicacion pendiente';
+  }
+
+  if (heartRate >= 110 || oxygen <= 92) {
+    return 'SOS';
+  }
+
+  if (heartRate >= 100 || oxygen <= 94) {
+    return 'Alerta';
+  }
+
+  return 'Normal';
+}
+
+function getRemoteEventLabel(type: string) {
+  const labels: Record<string, string> = {
+    battery_low: 'Bateria baja',
+    fall_detected: 'Caida detectada',
+    heart_rate_high: 'Ritmo cardiaco alto',
+    medication_pending: 'Medicacion pendiente',
+    medication_taken: 'Medicacion tomada',
+    normal_status: 'Estado normal',
+    performance_mode_enabled: 'Modo rendimiento activado',
+    sos: 'SOS activado',
+    spo2_low: 'Oxigeno bajo',
+  };
+
+  return labels[type] ?? type;
 }
 
 function createEvent(type: string, description: string): EventItem {
@@ -72,10 +169,6 @@ function createEvent(type: string, description: string): EventItem {
 
 function randomBetween(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function decimalBetween(min: number, max: number) {
-  return Number((Math.random() * (max - min) + min).toFixed(1));
 }
 
 function getTrend(previousHeartRate: number, nextHeartRate: number) {
@@ -99,36 +192,24 @@ function simulateVitalSigns(status: WatchStatus, previousVitals: VitalSigns): Vi
     nextVitals = {
       heartRate: randomBetween(105, 122),
       oxygen: randomBetween(92, 95),
-      temperature: decimalBetween(36.9, 37.5),
-      systolicPressure: randomBetween(136, 152),
-      diastolicPressure: randomBetween(84, 94),
       movement: 'Activo',
     };
   } else if (status === 'Caida detectada') {
     nextVitals = {
       heartRate: randomBetween(92, 112),
       oxygen: randomBetween(93, 97),
-      temperature: decimalBetween(36.5, 37.2),
-      systolicPressure: randomBetween(128, 145),
-      diastolicPressure: randomBetween(80, 90),
       movement: 'Caida',
     };
   } else if (status === 'Alerta') {
     nextVitals = {
       heartRate: randomBetween(82, 98),
       oxygen: randomBetween(94, 98),
-      temperature: decimalBetween(36.5, 37.3),
-      systolicPressure: randomBetween(124, 140),
-      diastolicPressure: randomBetween(78, 88),
       movement: 'Leve',
     };
   } else {
     nextVitals = {
       heartRate: randomBetween(68, 84),
       oxygen: randomBetween(96, 99),
-      temperature: decimalBetween(36.2, 37.0),
-      systolicPressure: randomBetween(110, 124),
-      diastolicPressure: randomBetween(70, 82),
       movement: Math.random() > 0.78 ? 'Leve' : 'Reposo',
     };
   }
@@ -140,14 +221,40 @@ function simulateVitalSigns(status: WatchStatus, previousVitals: VitalSigns): Vi
 }
 
 export function VitalWatchProvider({ children }: PropsWithChildren) {
+  const latestRemoteEventId = useRef<number | null>(null);
+  const notificationPermissionRef = useRef(false);
+  const registeredPushDeviceCode = useRef<string | null>(null);
+  const remoteDeviceCode = useRef<string | null>(null);
+  const remoteDeviceId = useRef<number | null>(null);
+  const remotePushIsActive = useRef(false);
+  const pushRegistrationInProgress = useRef(false);
   const [battery, setBattery] = useState(86);
+  const [dataSource, setDataSource] = useState<'Simulacion' | 'Supabase'>('Simulacion');
   const [deviceConnection, setDeviceConnection] = useState<DeviceConnection>(initialDeviceConnection);
+  const [displayControl, setDisplayControl] = useState<DeviceDisplayControl>(
+    initialDeviceDisplayControl
+  );
+  const [displayControlMessage, setDisplayControlMessage] = useState(
+    'Esperando la primera confirmacion del ESP32.'
+  );
   const [history, setHistory] = useState<EventItem[]>(initialHistory);
+  const [isMedicationSyncing, setIsMedicationSyncing] = useState(false);
+  const [isDisplayControlSyncing, setIsDisplayControlSyncing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(formatDateTime());
   const [medications, setMedications] = useState<Medication[]>(initialMedications);
+  const [medicationSyncMessage, setMedicationSyncMessage] = useState(
+    'Mostrando los medicamentos guardados en este celular.'
+  );
   const [notificationPermission, setNotificationPermission] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(initialProfile);
+  const [pushNotificationMessage, setPushNotificationMessage] = useState(
+    'Esperando la conexion con la pulsera.'
+  );
+  const [pushNotificationStatus, setPushNotificationStatus] =
+    useState<VitalWatchContextValue['pushNotificationStatus']>('Pendientes');
   const [status, setStatus] = useState<WatchStatus>('Normal');
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [vitals, setVitals] = useState<VitalSigns>(initialVitalSigns);
 
   useEffect(() => {
@@ -164,8 +271,27 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
       setHistory(savedHistory);
       setDeviceConnection(savedDeviceConnection);
 
-      const permissionWasGranted = await requestNotificationPermissions();
-      setNotificationPermission(permissionWasGranted);
+      try {
+        const permissionWasGranted = await requestNotificationPermissions();
+        notificationPermissionRef.current = permissionWasGranted;
+        setNotificationPermission(permissionWasGranted);
+
+        if (!permissionWasGranted) {
+          setPushNotificationStatus('Error');
+          setPushNotificationMessage(
+            'El permiso esta desactivado. Usa Abrir permisos de Android para habilitarlo.'
+          );
+        }
+      } catch (error) {
+        notificationPermissionRef.current = false;
+        setNotificationPermission(false);
+        setPushNotificationStatus('Error');
+        setPushNotificationMessage(
+          `No se pudo comprobar el permiso: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+
+      await refreshRemoteData();
     }
 
     prepareApp();
@@ -173,13 +299,296 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
+      void refreshRemoteData();
+    }, REMOTE_REFRESH_MS);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (dataSource === 'Supabase') {
+      return undefined;
+    }
+
+    const intervalId = setInterval(() => {
       // Esta simulacion reemplaza por ahora a los sensores reales del ESP32.
       setVitals((currentVitals) => simulateVitalSigns(status, currentVitals));
       setLastUpdated(formatDateTime());
     }, 3500);
 
     return () => clearInterval(intervalId);
-  }, [status]);
+  }, [dataSource, status]);
+
+  async function refreshRemoteData() {
+    setIsSyncing(true);
+
+    try {
+      const snapshot = await fetchDashboardSnapshot();
+      const latestRemoteEvent = snapshot.events[0];
+
+      if (latestRemoteEvent) {
+        if (
+          latestRemoteEventId.current !== null &&
+          latestRemoteEventId.current !== latestRemoteEvent.id &&
+          latestRemoteEvent.type !== 'normal_status' &&
+          !remotePushIsActive.current
+        ) {
+          void showLocalNotification('Alerta VitalWatch', latestRemoteEvent.message);
+        }
+
+        latestRemoteEventId.current = latestRemoteEvent.id;
+      }
+
+      const remoteProfile: UserProfile = {
+        elderName: snapshot.user.name,
+        contactName: snapshot.user.contactName,
+        contactInfo: '',
+      };
+      const remoteConnection: DeviceConnection = {
+        deviceName: `${snapshot.device.name} (${snapshot.device.code})`,
+        connectionMode: 'API',
+        endpoint: 'Supabase',
+      };
+
+      remoteDeviceCode.current = snapshot.device.code;
+      remoteDeviceId.current = snapshot.device.id;
+      const remoteDisplayControl: DeviceDisplayControl = {
+        commandAt: snapshot.device.displayCommandAt,
+        desiredOn: snapshot.device.desiredDisplayOn,
+        desiredView: snapshot.device.desiredDisplayView,
+        reportedAt: snapshot.device.displayReportedAt,
+        reportedOn: snapshot.device.reportedDisplayOn,
+        reportedView: snapshot.device.reportedDisplayView,
+      };
+      setDisplayControl(remoteDisplayControl);
+      if (remoteDisplayControl.reportedOn === null) {
+        setDisplayControlMessage('Esperando la primera confirmacion del ESP32.');
+      } else if (remoteDisplayControl.reportedOn !== remoteDisplayControl.desiredOn) {
+        setDisplayControlMessage('Orden enviada. Esperando que la pulsera la aplique.');
+      } else if (!remoteDisplayControl.desiredOn) {
+        setDisplayControlMessage('El ESP32 confirmo la pantalla apagada.');
+      } else if (remoteDisplayControl.reportedView === remoteDisplayControl.desiredView) {
+        setDisplayControlMessage(
+          `El ESP32 confirmo la vista ${getDisplayViewLabel(remoteDisplayControl.desiredView)}.`
+        );
+      } else {
+        setDisplayControlMessage('Pantalla encendida. Esperando el cambio de vista.');
+      }
+      await registerRemotePushNotifications(snapshot.device.code);
+      await refreshMedications(snapshot.device.code);
+      const remoteEvents: EventItem[] = snapshot.events.map((event) => ({
+        id: `supabase-${event.id}`,
+        type: getRemoteEventLabel(event.type),
+        description: event.message,
+        date: formatRemoteDateTime(event.eventTime),
+      }));
+
+      setProfile(remoteProfile);
+      setDeviceConnection(remoteConnection);
+      saveProfile(remoteProfile);
+      saveDeviceConnection(remoteConnection);
+
+      if (remoteEvents.length > 0) {
+        setHistory((currentHistory) => {
+          const remoteEventIds = new Set(remoteEvents.map((event) => event.id));
+          const preservedEvents = currentHistory.filter((event) => !remoteEventIds.has(event.id));
+          const mergedHistory = [...remoteEvents, ...preservedEvents].slice(0, 40);
+
+          void saveHistory(mergedHistory);
+          return mergedHistory;
+        });
+      }
+
+      const remoteReading = snapshot.latestReading;
+
+      if (remoteReading) {
+        const heartRate = remoteReading.heartRate ?? initialVitalSigns.heartRate;
+        const oxygen = remoteReading.oxygen ?? initialVitalSigns.oxygen;
+
+        setStatus(getRemoteStatus(snapshot.events, heartRate, oxygen));
+        setVitals((currentVitals) => {
+          return {
+            ...currentVitals,
+            heartRate,
+            oxygen,
+            movement:
+              snapshot.events[0]?.type === 'fall_detected' || (remoteReading.impact ?? 0) >= 2.5
+                ? 'Caida'
+                : 'Reposo',
+            trend: getTrend(currentVitals.heartRate, heartRate),
+          };
+        });
+        setLastUpdated(formatRemoteDateTime(remoteReading.recordedAt));
+      }
+
+      const remoteBattery = remoteReading?.battery ?? snapshot.device.battery;
+
+      if (remoteBattery !== null) {
+        setBattery(Math.max(0, Math.min(100, remoteBattery)));
+      }
+
+      setDataSource('Supabase');
+      setSyncError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error desconocido al consultar Supabase.';
+      setSyncError(message);
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  async function registerRemotePushNotifications(deviceCode: string, force = false) {
+    if (!notificationPermissionRef.current) {
+      return;
+    }
+
+    if (pushRegistrationInProgress.current) {
+      return;
+    }
+
+    if (!force && registeredPushDeviceCode.current === deviceCode) {
+      return;
+    }
+
+    pushRegistrationInProgress.current = true;
+    setPushNotificationStatus('Registrando');
+    setPushNotificationMessage('Registrando este celular para las alertas de la pulsera.');
+
+    try {
+      const expoPushToken = await getExpoPushToken(setPushNotificationMessage);
+      setPushNotificationMessage('Token Expo obtenido. Guardando el celular en Supabase.');
+      await registerDevicePushToken({ deviceCode, expoPushToken });
+
+      registeredPushDeviceCode.current = deviceCode;
+      remotePushIsActive.current = true;
+      setPushNotificationStatus('Activas');
+      setPushNotificationMessage('El celular recibira alertas aunque la app este cerrada.');
+    } catch (error) {
+      registeredPushDeviceCode.current = null;
+      remotePushIsActive.current = false;
+      setPushNotificationStatus('Error');
+      const message =
+        error instanceof Error ? error.message : 'No se pudieron activar las notificaciones remotas.';
+
+      if (message.includes('Default FirebaseApp is not initialized')) {
+        setPushNotificationMessage(
+          'Esta instalacion no incluye la configuracion FCM de Firebase. Se necesita instalar una nueva APK de VitalWatch.'
+        );
+      } else {
+        setPushNotificationMessage(message);
+      }
+    } finally {
+      pushRegistrationInProgress.current = false;
+    }
+  }
+
+  async function retryPushNotifications() {
+    setPushNotificationStatus('Registrando');
+    setPushNotificationMessage('Comprobando el permiso de notificaciones del celular.');
+
+    let permissionWasGranted = false;
+
+    try {
+      permissionWasGranted = await requestNotificationPermissions();
+      notificationPermissionRef.current = permissionWasGranted;
+      setNotificationPermission(permissionWasGranted);
+    } catch (error) {
+      notificationPermissionRef.current = false;
+      setNotificationPermission(false);
+      setPushNotificationStatus('Error');
+      setPushNotificationMessage(
+        `No se pudo comprobar el permiso: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return;
+    }
+
+    if (!permissionWasGranted) {
+      setPushNotificationStatus('Error');
+      setPushNotificationMessage(
+        'El permiso esta desactivado. Usa Abrir permisos de Android para habilitarlo.'
+      );
+      return;
+    }
+
+    if (!remoteDeviceCode.current) {
+      await refreshRemoteData();
+
+      if (!remoteDeviceCode.current) {
+        setPushNotificationStatus('Error');
+        setPushNotificationMessage(
+          'No se pudo obtener el codigo de la pulsera desde Supabase. Revisa la sincronizacion.'
+        );
+      }
+
+      return;
+    }
+
+    await registerRemotePushNotifications(remoteDeviceCode.current, true);
+  }
+
+  async function setDisplayEnabled(enabled: boolean) {
+    const deviceId = remoteDeviceId.current;
+    if (!deviceId) {
+      setDisplayControlMessage('Todavia no se pudo identificar la pulsera vinculada.');
+      return false;
+    }
+
+    setIsDisplayControlSyncing(true);
+    setDisplayControlMessage(
+      `Enviando orden para ${enabled ? 'encender' : 'apagar'} la pantalla...`
+    );
+
+    try {
+      const updatedControl = await setRemoteDisplayEnabled(deviceId, enabled);
+      setDisplayControl(updatedControl);
+      setDisplayControlMessage(
+        'Orden guardada en Supabase. El ESP32 puede tardar hasta 30 segundos.'
+      );
+      addHistoryEvent(
+        'Control de pantalla',
+        `Se solicito ${enabled ? 'encender' : 'apagar'} la pantalla de la pulsera.`
+      );
+      return true;
+    } catch (error) {
+      setDisplayControlMessage(
+        error instanceof Error ? error.message : 'No se pudo enviar la orden.'
+      );
+      return false;
+    } finally {
+      setIsDisplayControlSyncing(false);
+    }
+  }
+
+  async function setDisplayView(view: DeviceDisplayView) {
+    const deviceId = remoteDeviceId.current;
+    if (!deviceId) {
+      setDisplayControlMessage('Todavia no se pudo identificar la pulsera vinculada.');
+      return false;
+    }
+
+    setIsDisplayControlSyncing(true);
+    setDisplayControlMessage(`Abriendo ${getDisplayViewLabel(view)} en la pulsera...`);
+
+    try {
+      const updatedControl = await setRemoteDisplayView(deviceId, view);
+      setDisplayControl(updatedControl);
+      setDisplayControlMessage(
+        'Orden guardada en Supabase. El ESP32 puede tardar hasta 30 segundos.'
+      );
+      addHistoryEvent(
+        'Control de pantalla',
+        `Se solicito abrir ${getDisplayViewLabel(view)} en la pulsera.`
+      );
+      return true;
+    } catch (error) {
+      setDisplayControlMessage(
+        error instanceof Error ? error.message : 'No se pudo cambiar la vista.'
+      );
+      return false;
+    } finally {
+      setIsDisplayControlSyncing(false);
+    }
+  }
 
   function addHistoryEvent(type: string, description: string) {
     const newEvent = createEvent(type, description);
@@ -232,56 +641,103 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
     showLocalNotification('Recordatorio de medicacion', 'Hay una medicacion pendiente.');
   }
 
-  function addMedication(medication: Omit<Medication, 'id' | 'status'>) {
-    const newMedication: Medication = {
-      ...medication,
-      id: `med-${Date.now()}`,
-      status: 'Pendiente',
-    };
+  async function refreshMedications(deviceCode = remoteDeviceCode.current) {
+    if (!deviceCode) {
+      setMedicationSyncMessage('Esperando el codigo de la pulsera para sincronizar.');
+      return false;
+    }
 
-    const updatedMedications = [...medications, newMedication];
-    setMedications(updatedMedications);
-    saveMedications(updatedMedications);
-    addHistoryEvent('Medicacion agregada', `Se agrego ${newMedication.name}.`);
+    setIsMedicationSyncing(true);
+
+    try {
+      const remoteMedications = await fetchRemoteMedications(deviceCode);
+      setMedications(remoteMedications);
+      await saveMedications(remoteMedications);
+      setMedicationSyncMessage('Medicamentos sincronizados con la pulsera.');
+      return true;
+    } catch (error) {
+      setMedicationSyncMessage(
+        `Sin conexion: se muestran los datos guardados. ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return false;
+    } finally {
+      setIsMedicationSyncing(false);
+    }
+  }
+
+  async function runMedicationMutation(
+    action: (deviceCode: string) => Promise<Medication[]>,
+    eventType: string,
+    eventDescription: string
+  ) {
+    const deviceCode = remoteDeviceCode.current;
+
+    if (!deviceCode) {
+      setMedicationSyncMessage('Todavia no se pudo vincular la app con la pulsera.');
+      return false;
+    }
+
+    setIsMedicationSyncing(true);
+
+    try {
+      const remoteMedications = await action(deviceCode);
+      setMedications(remoteMedications);
+      await saveMedications(remoteMedications);
+      setMedicationSyncMessage('Cambio guardado en Supabase y disponible para el ESP32.');
+      addHistoryEvent(eventType, eventDescription);
+      return true;
+    } catch (error) {
+      setMedicationSyncMessage(
+        `No se pudo guardar el cambio: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return false;
+    } finally {
+      setIsMedicationSyncing(false);
+    }
+  }
+
+  function addMedication(medication: Omit<Medication, 'id' | 'status'>) {
+    return runMedicationMutation(
+      (deviceCode) => createRemoteMedication(deviceCode, medication),
+      'Medicacion agregada',
+      `Se agrego ${medication.name}.`
+    );
   }
 
   function updateMedication(updatedMedication: Medication) {
-    const updatedMedications = medications.map((medication) =>
-      medication.id === updatedMedication.id ? updatedMedication : medication
+    return runMedicationMutation(
+      (deviceCode) => updateRemoteMedication(deviceCode, updatedMedication),
+      'Medicacion editada',
+      `Se actualizo ${updatedMedication.name}.`
     );
-
-    setMedications(updatedMedications);
-    saveMedications(updatedMedications);
-    addHistoryEvent('Medicacion editada', `Se actualizo ${updatedMedication.name}.`);
   }
 
   function deleteMedication(id: string) {
     const medicationToDelete = medications.find((medication) => medication.id === id);
-    const updatedMedications = medications.filter((medication) => medication.id !== id);
 
-    setMedications(updatedMedications);
-    saveMedications(updatedMedications);
-    addHistoryEvent('Medicacion eliminada', `Se elimino ${medicationToDelete?.name ?? 'un medicamento'}.`);
+    return runMedicationMutation(
+      (deviceCode) => deleteRemoteMedication(deviceCode, id),
+      'Medicacion eliminada',
+      `Se elimino ${medicationToDelete?.name ?? 'un medicamento'}.`
+    );
   }
 
   function markMedicationTaken(id: string) {
-    const updatedMedications = medications.map((medication) =>
-      medication.id === id ? { ...medication, status: 'Tomado' as const } : medication
+    return runMedicationMutation(
+      (deviceCode) => setRemoteMedicationStatus(deviceCode, id, 'taken'),
+      'Medicacion tomada',
+      'Medicacion marcada como tomada.'
     );
-
-    setMedications(updatedMedications);
-    saveMedications(updatedMedications);
-    addHistoryEvent('Medicacion tomada', 'Medicacion marcada como tomada.');
   }
 
   function markMedicationPending(id: string) {
-    const updatedMedications = medications.map((medication) =>
-      medication.id === id ? { ...medication, status: 'Pendiente' as const } : medication
+    return runMedicationMutation(
+      (deviceCode) => setRemoteMedicationStatus(deviceCode, id, 'pending'),
+      'Medicacion pendiente',
+      'Medicacion marcada nuevamente como pendiente.'
     );
-
-    setMedications(updatedMedications);
-    saveMedications(updatedMedications);
-    addHistoryEvent('Medicacion pendiente', 'Medicacion marcada nuevamente como pendiente.');
   }
 
   function updateProfile(nextProfile: UserProfile) {
@@ -299,13 +755,23 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
   const value = useMemo(
     () => ({
       battery,
+      dataSource,
       deviceConnection,
+      displayControl,
+      displayControlMessage,
       history,
+      isMedicationSyncing,
+      isDisplayControlSyncing,
+      isSyncing,
       lastUpdated,
       medications,
+      medicationSyncMessage,
       notificationPermission,
       profile,
+      pushNotificationMessage,
+      pushNotificationStatus,
       status,
+      syncError,
       vitals,
       activateFall,
       activateLowBattery,
@@ -316,19 +782,34 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
       deleteMedication,
       markMedicationTaken,
       markMedicationPending,
+      refreshMedications,
+      refreshRemoteData,
+      retryPushNotifications,
+      setDisplayEnabled,
+      setDisplayView,
       updateDeviceConnection,
       updateMedication,
       updateProfile,
     }),
     [
       battery,
+      dataSource,
       deviceConnection,
+      displayControl,
+      displayControlMessage,
       history,
+      isMedicationSyncing,
+      isDisplayControlSyncing,
+      isSyncing,
       lastUpdated,
       medications,
+      medicationSyncMessage,
       notificationPermission,
       profile,
+      pushNotificationMessage,
+      pushNotificationStatus,
       status,
+      syncError,
       vitals,
     ]
   );

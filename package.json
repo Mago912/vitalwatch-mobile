@@ -8,7 +8,19 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "firmware:setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-setup.ps1",
+    "firmware:prepare": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-prepare-other-pc.ps1",
+    "firmware:configure": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-configure.ps1",
+    "firmware:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-firmware.ps1 -Action build",
+    "firmware:baseline:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-firmware.ps1 -Action baseline-build",
+    "firmware:ports": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-firmware.ps1 -Action ports",
+    "firmware:upload": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-firmware.ps1 -Action upload",
+    "firmware:monitor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-firmware.ps1 -Action monitor",
+    "firmware:tft:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-firmware.ps1 -Action tft-build",
+    "firmware:tft:upload": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-firmware.ps1 -Action tft-upload",
+    "simulate:device": "node --env-file=.env.local --env-file=.env.simulator.local scripts/vitalwatch-simulator.mjs",
+    "test:security": "node --env-file=.env.local scripts/test-vitalwatch-security.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -16,8 +28,9 @@
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
-    "expo": "~54.0.34",
-    "expo-constants": "~18.0.13",
+    "@supabase/supabase-js": "^2.112.0",
+    "expo": "~54.0.37",
+    "expo-constants": "~18.0.14",
     "expo-font": "~14.0.11",
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
@@ -41,9 +54,12 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
-    "typescript": "~5.9.2",
     "eslint": "^9.25.0",
-    "eslint-config-expo": "~10.0.0"
+    "eslint-config-expo": "~10.0.0",
+    "typescript": "~5.9.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   },
   "private": true
 }

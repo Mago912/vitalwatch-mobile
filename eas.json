@@ -1,6 +1,13 @@
 {
+  "cli": {
+    "appVersionSource": "remote"
+  },
   "build": {
     "preview": {
+      "autoIncrement": true,
+      "distribution": "internal",
+      "environment": "preview",
+      "node": "22.23.1",
       "android": {
         "buildType": "apk"
       }

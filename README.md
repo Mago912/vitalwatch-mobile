@@ -1,50 +1,84 @@
-# Welcome to your Expo app 👋
+# VitalWatch Mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+La guia para sincronizar medicamentos entre la app, Supabase y el ESP32 esta en
+[`ESP32_MEDICATIONS.md`](ESP32_MEDICATIONS.md).
 
-## Get started
+Aplicacion Expo para visualizar el estado de una pulsera VitalWatch, consultar
+lecturas simuladas desde Supabase, administrar medicacion y recibir alertas
+locales o push remotas en Android e iOS.
 
-1. Install dependencies
+## Cuenta y vinculacion
 
-   ```bash
-   npm install
-   ```
+La aplicacion usa Supabase Auth. Al abrir una instalacion nueva:
 
-2. Start the app
+1. Crea una cuenta con correo y contrasena.
+2. Confirma el correo si el proyecto de Supabase tiene esa opcion activa.
+3. Inicia sesion.
+4. Vincula la pulsera con el identificador `VW-001` y su codigo de un solo uso.
 
-   ```bash
-   npx expo start
-   ```
+La base de datos usa RLS para separar los datos de cada cuenta. El ESP32 se
+autentica con una credencial propia y nunca recibe la contrasena del usuario.
 
-In the output, you'll find options to open the app in a
+## Ejecutar la app
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```powershell
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+La configuracion publica de Supabase se guarda en `.env.local` siguiendo
+`.env.example`. Nunca coloques claves `sb_secret_` en variables
+`EXPO_PUBLIC_`.
 
-## Learn more
+Consulta [PUSH_NOTIFICATIONS.md](./PUSH_NOTIFICATIONS.md) para desplegar y
+probar la Edge Function y el Database Webhook.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Estructura principal
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- `app/`: pantallas y navegacion con Expo Router.
+- `providers/`: estado compartido de VitalWatch.
+- `lib/`: acceso a Supabase, almacenamiento y notificaciones.
+- `esp32/`: firmware para la pantalla ST7735 y sincronizacion de medicamentos.
+- `supabase/migrations/`: cambios reproducibles de base de datos.
+- `supabase/functions/`: Edge Functions del backend.
 
-## Join the community
+## Verificaciones
 
-Join our community of developers creating universal apps.
+```powershell
+npm run lint
+npx tsc --noEmit
+npm run test:security
+npx expo-doctor
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Simulador del ESP32
+
+El simulador guarda lecturas y alertas en Supabase cada 15 segundos. Consulta
+[SIMULATOR.md](./SIMULATOR.md) para configurar su clave secreta y ejecutarlo.
+
+## Firmware real
+
+El firmware 0.9.0 integra la pantalla ST7735, MAX30102, MPU, botones,
+medicamentos y telemetria segura hacia Supabase. Envia frecuencia cardiaca,
+SpO2 e impacto reales; tambien registra caidas y SOS. La bateria solo se envia
+cuando existe un circuito ADC configurado, para no inventar porcentajes. Tambien
+permite configurar el WiFi desde un celular y recordarlo en el ESP32. La app
+tambien puede encender, apagar y elegir la vista mostrada en la TFT. Puede
+compilarse con:
+
+```powershell
+npm run firmware:setup
+npm run firmware:build
+```
+
+El cableado, la configuracion WiFi y los comandos de carga estan explicados en
+[`ESP32_MEDICATIONS.md`](ESP32_MEDICATIONS.md).
+
+El uso del portal WiFi esta explicado paso a paso en
+[`WIFI_ESP32.md`](WIFI_ESP32.md).
+
+Para trasladar y probar firmware 0.9.0 en la computadora conectada al ESP32,
+consulta [`PROBAR_EN_OTRA_PC.md`](PROBAR_EN_OTRA_PC.md).
+
+El control remoto y sus limites electricos estan explicados en
+[`CONTROL_REMOTO_TFT.md`](CONTROL_REMOTO_TFT.md).

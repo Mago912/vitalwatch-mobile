@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1017719256752",
+    "project_id": "vitalwatch-2f0b7",
+    "storage_bucket": "vitalwatch-2f0b7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1017719256752:android:c8063ab912f1565b45ad75",
+        "android_client_info": {
+          "package_name": "com.vitalwatchmobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBi_LJ2PYIUhHcxYeW5ai8hCkTO-0JSnVA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

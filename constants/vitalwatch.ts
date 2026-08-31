@@ -32,14 +32,30 @@ export type DeviceConnection = {
   endpoint: string;
 };
 
+export type DeviceDisplayView = 'menu' | 'vitals' | 'movement' | 'status' | 'medication';
+
+export type DeviceDisplayControl = {
+  commandAt: string | null;
+  desiredOn: boolean;
+  desiredView: DeviceDisplayView;
+  reportedAt: string | null;
+  reportedOn: boolean | null;
+  reportedView: DeviceDisplayView | null;
+};
+
+export const deviceDisplayViews: { label: string; value: DeviceDisplayView }[] = [
+  { label: 'Menu principal', value: 'menu' },
+  { label: 'Signos vitales', value: 'vitals' },
+  { label: 'Movimiento', value: 'movement' },
+  { label: 'Estado del equipo', value: 'status' },
+  { label: 'Medicacion', value: 'medication' },
+];
+
 export type VitalTrend = 'sube' | 'baja' | 'estable';
 
 export type VitalSigns = {
   heartRate: number;
   oxygen: number;
-  temperature: number;
-  systolicPressure: number;
-  diastolicPressure: number;
   movement: 'Reposo' | 'Leve' | 'Activo' | 'Caida';
   trend: VitalTrend;
 };
@@ -73,6 +89,15 @@ export const initialDeviceConnection: DeviceConnection = {
   endpoint: 'http://192.168.4.1/estado',
 };
 
+export const initialDeviceDisplayControl: DeviceDisplayControl = {
+  commandAt: null,
+  desiredOn: true,
+  desiredView: 'menu',
+  reportedAt: null,
+  reportedOn: null,
+  reportedView: null,
+};
+
 export const initialHistory: EventItem[] = [
   {
     id: 'event-demo-1',
@@ -85,9 +110,6 @@ export const initialHistory: EventItem[] = [
 export const initialVitalSigns: VitalSigns = {
   heartRate: 76,
   oxygen: 98,
-  temperature: 36.7,
-  systolicPressure: 118,
-  diastolicPressure: 76,
   movement: 'Reposo',
   trend: 'estable',
 };

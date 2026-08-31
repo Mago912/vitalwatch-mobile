@@ -11,11 +11,16 @@ export default function HomeScreen() {
     activateNormal,
     activateSos,
     battery,
+    dataSource,
     history,
+    isSyncing,
     lastUpdated,
     notificationPermission,
     profile,
+    pushNotificationStatus,
+    refreshRemoteData,
     status,
+    syncError,
     vitals,
   } = useVitalWatch();
 
@@ -45,11 +50,15 @@ export default function HomeScreen() {
       <View style={styles.liveHeader}>
         <View>
           <Text style={styles.sectionTitle}>Signos vitales en vivo</Text>
-          <Text style={styles.sectionHelp}>Lecturas simuladas actualizadas automaticamente.</Text>
+          <Text style={styles.sectionHelp}>
+            {dataSource === 'Supabase'
+              ? 'Lecturas obtenidas desde la base de datos.'
+              : 'Lecturas simuladas actualizadas automaticamente.'}
+          </Text>
         </View>
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveText}>En vivo</Text>
+          <Text style={styles.liveText}>{dataSource}</Text>
         </View>
       </View>
 
@@ -71,26 +80,6 @@ export default function HomeScreen() {
           normalText="Normal: 95% o mas"
           unit="%"
           value={vitals.oxygen}
-        />
-        <VitalCard
-          color="#D97706"
-          decimals={1}
-          label="Temperatura"
-          max={39}
-          min={35}
-          normalText="Normal: 36.0 a 37.5 C"
-          unit="C"
-          value={vitals.temperature}
-        />
-        <VitalCard
-          color="#6D28D9"
-          label="Presion"
-          max={160}
-          min={90}
-          normalText="Referencia: aprox. 120/80"
-          unit="mmHg"
-          value={vitals.systolicPressure}
-          valueText={`${vitals.systolicPressure}/${vitals.diastolicPressure}`}
         />
       </View>
 
@@ -128,6 +117,20 @@ export default function HomeScreen() {
           <Text style={styles.permissionText}>
             Notificaciones: {notificationPermission ? 'activas' : 'sin permiso'}
           </Text>
+          <Text style={styles.permissionText}>Push remotas: {pushNotificationStatus}</Text>
+          <Text style={styles.permissionText}>Fuente: {dataSource}</Text>
+          {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
+          <Pressable
+            disabled={isSyncing}
+            onPress={() => void refreshRemoteData()}
+            style={({ pressed }) => [
+              styles.refreshButton,
+              (pressed || isSyncing) && styles.refreshButtonPressed,
+            ]}>
+            <Text style={styles.refreshButtonText}>
+              {isSyncing ? 'Actualizando...' : 'Actualizar datos'}
+            </Text>
+          </Pressable>
         </View>
       </View>
 
@@ -169,33 +172,28 @@ export default function HomeScreen() {
 
 function VitalCard({
   color,
-  decimals = 0,
   label,
   max,
   min,
   normalText,
   unit,
   value,
-  valueText,
 }: {
   color: string;
-  decimals?: number;
   label: string;
   max: number;
   min: number;
   normalText: string;
   unit: string;
   value: number;
-  valueText?: string;
 }) {
   const progress = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
-  const visibleValue = valueText ?? value.toFixed(decimals);
 
   return (
     <View style={styles.vitalCard}>
       <Text style={styles.vitalLabel}>{label}</Text>
       <View style={styles.vitalValueRow}>
-        <Text style={styles.vitalValue}>{visibleValue}</Text>
+        <Text style={styles.vitalValue}>{value}</Text>
         <Text style={styles.vitalUnit}>{unit}</Text>
       </View>
       <View style={styles.vitalTrack}>
@@ -315,6 +313,28 @@ const styles = StyleSheet.create({
   permissionText: {
     color: appColors.muted,
     fontSize: 13,
+  },
+  refreshButton: {
+    alignItems: 'center',
+    backgroundColor: appColors.primary,
+    borderRadius: 12,
+    minHeight: 40,
+    justifyContent: 'center',
+    marginTop: 4,
+    paddingHorizontal: 10,
+  },
+  refreshButtonPressed: {
+    opacity: 0.65,
+  },
+  refreshButtonText: {
+    color: appColors.buttonText,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  syncError: {
+    color: appColors.danger,
+    fontSize: 12,
+    lineHeight: 17,
   },
   section: {
     backgroundColor: appColors.card,

@@ -15,14 +15,18 @@ export default function MedicationScreen() {
     activateMedicationReminder,
     addMedication,
     deleteMedication,
+    isMedicationSyncing,
     markMedicationPending,
     markMedicationTaken,
+    medicationSyncMessage,
     medications,
     profile,
+    refreshMedications,
     updateMedication,
   } = useVitalWatch();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [formError, setFormError] = useState('');
 
   const editingMedication = medications.find((medication) => medication.id === editingId);
   const formTitle = editingMedication ? 'Editar medicamento' : 'Agregar medicamento';
@@ -39,33 +43,53 @@ export default function MedicationScreen() {
   function clearForm() {
     setEditingId(null);
     setForm(emptyForm);
+    setFormError('');
   }
 
-  function handleSaveMedication() {
+  async function handleSaveMedication() {
     const name = form.name.trim();
     const dose = form.dose.trim();
     const time = form.time.trim();
 
     if (!name || !time) {
+      setFormError('Completa el nombre y la hora.');
       return;
     }
 
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+      setFormError('Escribe la hora con formato HH:MM, por ejemplo 09:00.');
+      return;
+    }
+
+    setFormError('');
+    let wasSaved = false;
+
     if (editingMedication) {
-      updateMedication({
+      wasSaved = await updateMedication({
         ...editingMedication,
         name,
         dose: dose || 'Dosis no especificada',
         time,
       });
     } else {
-      addMedication({
+      wasSaved = await addMedication({
         name,
         dose: dose || 'Dosis no especificada',
         time,
       });
     }
 
-    clearForm();
+    if (wasSaved) {
+      clearForm();
+    }
+  }
+
+  async function handleMedicationStatus(medication: Medication) {
+    if (medication.status === 'Tomado') {
+      await markMedicationPending(medication.id);
+    } else {
+      await markMedicationTaken(medication.id);
+    }
   }
 
   return (
@@ -82,38 +106,49 @@ export default function MedicationScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{formTitle}</Text>
         <Text style={styles.helpText}>
-          Estos datos quedan guardados en el celular con AsyncStorage. Mas adelante pueden venir de
-          una base de datos.
+          Los cambios se guardan en Supabase para que la app y el ESP32 vean la misma informacion.
+          AsyncStorage conserva una copia para cuando no haya conexion.
         </Text>
+
+        {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
 
         <InputField
           label="Nombre"
           value={form.name}
           onChangeText={(name) => setForm((currentForm) => ({ ...currentForm, name }))}
           placeholder="Ej: Losartan 50 mg"
+          editable={!isMedicationSyncing}
         />
         <InputField
           label="Dosis"
           value={form.dose}
           onChangeText={(dose) => setForm((currentForm) => ({ ...currentForm, dose }))}
           placeholder="Ej: 1 comprimido"
+          editable={!isMedicationSyncing}
         />
         <InputField
           label="Hora"
           value={form.time}
           onChangeText={(time) => setForm((currentForm) => ({ ...currentForm, time }))}
           placeholder="Ej: 09:00"
+          editable={!isMedicationSyncing}
         />
 
         <View style={styles.formActions}>
           <Pressable
             onPress={handleSaveMedication}
+            disabled={isMedicationSyncing}
             style={({ pressed }) => [
               styles.saveButton,
               { backgroundColor: pressed ? '#075985' : appColors.primary },
+              isMedicationSyncing && styles.disabledButton,
             ]}>
             <Text style={styles.primaryButtonText}>
-              {editingMedication ? 'Guardar cambios' : 'Agregar medicamento'}
+              {isMedicationSyncing
+                ? 'Guardando...'
+                : editingMedication
+                  ? 'Guardar cambios'
+                  : 'Agregar medicamento'}
             </Text>
           </Pressable>
 
@@ -126,7 +161,24 @@ export default function MedicationScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Medicamentos programados</Text>
+        <View style={styles.syncHeader}>
+          <View style={styles.syncText}>
+            <Text style={styles.sectionTitle}>Medicamentos programados</Text>
+            <Text style={styles.helpText}>{medicationSyncMessage}</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Actualizar medicamentos"
+            disabled={isMedicationSyncing}
+            onPress={() => void refreshMedications()}
+            style={({ pressed }) => [
+              styles.refreshButton,
+              pressed && styles.refreshButtonPressed,
+              isMedicationSyncing && styles.disabledButton,
+            ]}>
+            <Text style={styles.refreshButtonText}>{isMedicationSyncing ? '...' : 'Actualizar'}</Text>
+          </Pressable>
+        </View>
 
         {medications.length === 0 ? (
           <Text style={styles.helpText}>Todavia no hay medicamentos cargados.</Text>
@@ -152,14 +204,14 @@ export default function MedicationScreen() {
 
               <View style={styles.medicationActions}>
                 <Pressable
-                  onPress={() =>
-                    isTaken ? markMedicationPending(medication.id) : markMedicationTaken(medication.id)
-                  }
+                  disabled={isMedicationSyncing}
+                  onPress={() => void handleMedicationStatus(medication)}
                   style={({ pressed }) => [
                     styles.primaryButton,
                     {
                       backgroundColor: pressed ? '#334155' : isTaken ? '#64748B' : '#0A7EA4',
                     },
+                    isMedicationSyncing && styles.disabledButton,
                   ]}>
                   <Text style={styles.primaryButtonText}>
                     {isTaken ? 'Volver a pendiente' : 'Marcar como tomado'}
@@ -167,10 +219,16 @@ export default function MedicationScreen() {
                 </Pressable>
 
                 <View style={styles.smallActions}>
-                  <Pressable onPress={() => startEditing(medication)} style={styles.secondaryButton}>
+                  <Pressable
+                    disabled={isMedicationSyncing}
+                    onPress={() => startEditing(medication)}
+                    style={[styles.secondaryButton, isMedicationSyncing && styles.disabledButton]}>
                     <Text style={styles.secondaryButtonText}>Editar</Text>
                   </Pressable>
-                  <Pressable onPress={() => deleteMedication(medication.id)} style={styles.deleteButton}>
+                  <Pressable
+                    disabled={isMedicationSyncing}
+                    onPress={() => void deleteMedication(medication.id)}
+                    style={[styles.deleteButton, isMedicationSyncing && styles.disabledButton]}>
                     <Text style={styles.deleteButtonText}>Eliminar</Text>
                   </Pressable>
                 </View>
@@ -200,11 +258,13 @@ export default function MedicationScreen() {
 }
 
 function InputField({
+  editable,
   label,
   onChangeText,
   placeholder,
   value,
 }: {
+  editable: boolean;
   label: string;
   onChangeText: (text: string) => void;
   placeholder: string;
@@ -214,11 +274,12 @@ function InputField({
     <View style={styles.inputGroup}>
       <Text style={styles.inputLabel}>{label}</Text>
       <TextInput
+        editable={editable}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor="#94A3B8"
-        style={styles.input}
+        style={[styles.input, !editable && styles.disabledInput]}
       />
     </View>
   );
@@ -268,6 +329,36 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  errorText: {
+    color: '#B91C1C',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  syncHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  syncText: {
+    flex: 1,
+    gap: 6,
+  },
+  refreshButton: {
+    backgroundColor: '#E0F2FE',
+    borderRadius: 8,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  refreshButtonPressed: {
+    backgroundColor: '#BAE6FD',
+  },
+  refreshButtonText: {
+    color: '#075985',
+    fontSize: 14,
+    fontWeight: '900',
+  },
   inputGroup: {
     gap: 8,
   },
@@ -285,6 +376,12 @@ const styles = StyleSheet.create({
     fontSize: 17,
     minHeight: 54,
     paddingHorizontal: 14,
+  },
+  disabledInput: {
+    opacity: 0.6,
+  },
+  disabledButton: {
+    opacity: 0.55,
   },
   formActions: {
     gap: 10,

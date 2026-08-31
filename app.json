@@ -2,16 +2,18 @@
   "expo": {
     "name": "vitalwatch-mobile",
     "slug": "vitalwatch-mobile",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "vitalwatchmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.vitalwatchmobile",
       "supportsTablet": true
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -28,7 +30,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "color": "#DC2626",
+          "defaultChannel": "vitalwatch-alerts"
+        }
+      ],
       [
         "expo-splash-screen",
         {
