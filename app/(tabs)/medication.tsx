@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { appColors, Medication } from '@/constants/vitalwatch';
+import { appColors, currentArgentinaDate, Medication } from '@/constants/vitalwatch';
 import { useVitalWatch } from '@/providers/vitalwatch-provider';
 
-const emptyForm = {
-  name: '',
-  dose: '',
-  time: '',
-};
+function createEmptyForm() {
+  return {
+    name: '',
+    dose: '',
+    date: currentArgentinaDate(),
+    time: '',
+  };
+}
 
 export default function MedicationScreen() {
   const {
@@ -25,7 +28,7 @@ export default function MedicationScreen() {
     updateMedication,
   } = useVitalWatch();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(createEmptyForm);
   const [formError, setFormError] = useState('');
 
   const editingMedication = medications.find((medication) => medication.id === editingId);
@@ -36,23 +39,30 @@ export default function MedicationScreen() {
     setForm({
       name: medication.name,
       dose: medication.dose || '',
+      date: medication.date,
       time: medication.time,
     });
   }
 
   function clearForm() {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm(createEmptyForm());
     setFormError('');
   }
 
   async function handleSaveMedication() {
     const name = form.name.trim();
     const dose = form.dose.trim();
+    const date = form.date.trim();
     const time = form.time.trim();
 
-    if (!name || !time) {
-      setFormError('Completa el nombre y la hora.');
+    if (!name || !date || !time) {
+      setFormError('Completa el nombre, la fecha y la hora.');
+      return;
+    }
+
+    if (!isValidDate(date)) {
+      setFormError('Escribe una fecha valida con formato AAAA-MM-DD, por ejemplo 2026-08-31.');
       return;
     }
 
@@ -69,12 +79,14 @@ export default function MedicationScreen() {
         ...editingMedication,
         name,
         dose: dose || 'Dosis no especificada',
+        date,
         time,
       });
     } else {
       wasSaved = await addMedication({
         name,
         dose: dose || 'Dosis no especificada',
+        date,
         time,
       });
     }
@@ -124,6 +136,13 @@ export default function MedicationScreen() {
           value={form.dose}
           onChangeText={(dose) => setForm((currentForm) => ({ ...currentForm, dose }))}
           placeholder="Ej: 1 comprimido"
+          editable={!isMedicationSyncing}
+        />
+        <InputField
+          label="Fecha"
+          value={form.date}
+          onChangeText={(date) => setForm((currentForm) => ({ ...currentForm, date }))}
+          placeholder="Ej: 2026-08-31"
           editable={!isMedicationSyncing}
         />
         <InputField
@@ -193,7 +212,9 @@ export default function MedicationScreen() {
                 <View style={styles.medicationInfo}>
                   <Text style={styles.medicationName}>{medication.name}</Text>
                   <Text style={styles.medicationTime}>Dosis: {medication.dose || 'No cargada'}</Text>
-                  <Text style={styles.medicationTime}>Hora: {medication.time}</Text>
+                  <Text style={styles.medicationTime}>
+                    Fecha y hora: {formatMedicationDate(medication.date)} a las {medication.time}
+                  </Text>
                 </View>
                 <View style={[styles.badge, isTaken ? styles.badgeTaken : styles.badgePending]}>
                   <Text style={[styles.badgeText, isTaken ? styles.badgeTextTaken : styles.badgeTextPending]}>
@@ -255,6 +276,22 @@ export default function MedicationScreen() {
       </View>
     </ScrollView>
   );
+}
+
+function isValidDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function formatMedicationDate(value: string) {
+  const [year, month, day] = value.split('-');
+  return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
 function InputField({

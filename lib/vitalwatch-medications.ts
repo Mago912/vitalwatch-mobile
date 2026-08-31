@@ -1,7 +1,7 @@
 import { Medication } from '@/constants/vitalwatch';
 import { supabase } from '@/lib/supabase';
 
-type MedicationDraft = Pick<Medication, 'name' | 'dose' | 'time'>;
+type MedicationDraft = Pick<Medication, 'name' | 'dose' | 'date' | 'time'>;
 
 type DeviceRow = {
   id: number;
@@ -12,6 +12,7 @@ type MedicationRow = {
   dose: string;
   id: number;
   name: string;
+  scheduled_date: string;
   scheduled_time: string;
 };
 
@@ -34,6 +35,7 @@ export async function createRemoteMedication(deviceCode: string, medication: Med
     user_id: device.user_id,
     name: medication.name.trim(),
     dose: medication.dose.trim(),
+    scheduled_date: medication.date,
     scheduled_time: `${medication.time}:00`,
     active: true,
   });
@@ -53,6 +55,7 @@ export async function updateRemoteMedication(deviceCode: string, medication: Med
     .update({
       name: medication.name.trim(),
       dose: medication.dose.trim(),
+      scheduled_date: medication.date,
       scheduled_time: `${medication.time}:00`,
     })
     .eq('id', medicationId)
@@ -87,10 +90,25 @@ export async function setRemoteMedicationStatus(
 ) {
   const device = await findDevice(deviceCode);
   const now = new Date().toISOString();
+  const medicationId = parseMedicationId(id);
+  const { data: medication, error: medicationError } = await supabase
+    .from('medications')
+    .select('scheduled_date, scheduled_time')
+    .eq('id', medicationId)
+    .eq('user_id', device.user_id)
+    .single();
+
+  if (medicationError) {
+    throw new Error(`No se pudo consultar el horario: ${medicationError.message}`);
+  }
+
   const { error } = await supabase.from('medication_logs').insert({
-    medication_id: parseMedicationId(id),
+    medication_id: medicationId,
     device_id: device.id,
-    scheduled_for: now,
+    scheduled_for: scheduledDateTimeToIso(
+      medication.scheduled_date,
+      medication.scheduled_time.slice(0, 5)
+    ),
     taken_at: status === 'taken' ? now : null,
     status,
     source: 'mobile_app',
@@ -124,9 +142,10 @@ async function findDevice(deviceCode: string): Promise<DeviceRow> {
 async function listMedications(device: DeviceRow): Promise<Medication[]> {
   const { data: medicationRows, error: medicationsError } = await supabase
     .from('medications')
-    .select('id, name, dose, scheduled_time')
+    .select('id, name, dose, scheduled_date, scheduled_time')
     .eq('user_id', device.user_id)
     .eq('active', true)
+    .order('scheduled_date', { ascending: true })
     .order('scheduled_time', { ascending: true });
 
   if (medicationsError) {
@@ -153,13 +172,10 @@ async function listMedications(device: DeviceRow): Promise<Medication[]> {
     throw new Error(`No se pudo leer el estado de los medicamentos: ${logsError.message}`);
   }
 
-  const today = argentinaDateKey(new Date().toISOString());
   const latestStatus = new Map<number, string>();
 
   for (const log of (logRows ?? []) as MedicationLogRow[]) {
-    const statusDate = log.taken_at ?? log.scheduled_for ?? log.created_at;
-
-    if (!latestStatus.has(log.medication_id) && argentinaDateKey(statusDate) === today) {
+    if (!latestStatus.has(log.medication_id)) {
       latestStatus.set(log.medication_id, log.status);
     }
   }
@@ -168,18 +184,14 @@ async function listMedications(device: DeviceRow): Promise<Medication[]> {
     id: String(medication.id),
     name: medication.name,
     dose: medication.dose,
+    date: medication.scheduled_date,
     time: medication.scheduled_time.slice(0, 5),
     status: latestStatus.get(medication.id) === 'taken' ? 'Tomado' : 'Pendiente',
   }));
 }
 
-function argentinaDateKey(value: string) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(value));
+function scheduledDateTimeToIso(date: string, time: string) {
+  return new Date(`${date}T${time}:00-03:00`).toISOString();
 }
 
 function parseMedicationId(id: string) {

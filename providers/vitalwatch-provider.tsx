@@ -26,6 +26,7 @@ import { registerDevicePushToken } from '@/lib/vitalwatch-push';
 import {
   setRemoteDisplayEnabled,
   setRemoteDisplayView,
+  waitForRemoteDisplayConfirmation,
 } from '@/lib/vitalwatch-device-control';
 import { DashboardEvent, fetchDashboardSnapshot } from '@/lib/vitalwatch-api';
 import {
@@ -541,9 +542,22 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
     try {
       const updatedControl = await setRemoteDisplayEnabled(deviceId, enabled);
       setDisplayControl(updatedControl);
-      setDisplayControlMessage(
-        'Orden guardada en Supabase. El ESP32 puede tardar hasta 30 segundos.'
+      setDisplayControlMessage('Orden enviada. Esperando la confirmacion del ESP32...');
+      const confirmedControl = await waitForRemoteDisplayConfirmation(
+        deviceId,
+        enabled,
+        updatedControl.desiredView
       );
+      if (confirmedControl) {
+        setDisplayControl(confirmedControl);
+        setDisplayControlMessage(
+          enabled
+            ? `El ESP32 confirmo la vista ${getDisplayViewLabel(confirmedControl.desiredView)}.`
+            : 'El ESP32 confirmo la pantalla apagada.'
+        );
+      } else {
+        setDisplayControlMessage('Orden enviada. La pulsera todavia no confirmo el cambio.');
+      }
       addHistoryEvent(
         'Control de pantalla',
         `Se solicito ${enabled ? 'encender' : 'apagar'} la pantalla de la pulsera.`
@@ -572,9 +586,14 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
     try {
       const updatedControl = await setRemoteDisplayView(deviceId, view);
       setDisplayControl(updatedControl);
-      setDisplayControlMessage(
-        'Orden guardada en Supabase. El ESP32 puede tardar hasta 30 segundos.'
-      );
+      setDisplayControlMessage('Orden enviada. Esperando la confirmacion del ESP32...');
+      const confirmedControl = await waitForRemoteDisplayConfirmation(deviceId, true, view);
+      if (confirmedControl) {
+        setDisplayControl(confirmedControl);
+        setDisplayControlMessage(`El ESP32 confirmo la vista ${getDisplayViewLabel(view)}.`);
+      } else {
+        setDisplayControlMessage('Orden enviada. La pulsera todavia no confirmo el cambio.');
+      }
       addHistoryEvent(
         'Control de pantalla',
         `Se solicito abrir ${getDisplayViewLabel(view)} en la pulsera.`

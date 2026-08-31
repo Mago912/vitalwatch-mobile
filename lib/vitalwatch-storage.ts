@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { currentArgentinaDate } from '@/constants/vitalwatch';
 import type { DeviceConnection, EventItem, Medication, UserProfile } from '@/constants/vitalwatch';
 
 const PROFILE_KEY = 'vitalwatch.profile';
@@ -29,8 +30,12 @@ export function saveProfile(profile: UserProfile) {
   return saveJson(PROFILE_KEY, profile);
 }
 
-export function loadMedications(fallback: Medication[]) {
-  return loadJson(MEDICATIONS_KEY, fallback);
+export async function loadMedications(fallback: Medication[]) {
+  const medications = await loadJson<Medication[]>(MEDICATIONS_KEY, fallback);
+  return medications.map((medication) => ({
+    ...medication,
+    date: medication.date || currentArgentinaDate(),
+  }));
 }
 
 export function saveMedications(medications: Medication[]) {

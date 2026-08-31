@@ -65,10 +65,27 @@ const validDeviceToken = await fetch(
   }
 );
 const validDeviceBody = await validDeviceToken.json().catch(() => ({}));
+const fastDisplayControl = await fetch(
+  `${supabaseUrl}/functions/v1/vitalwatch-device-medications`,
+  {
+    method: 'POST',
+    headers: { ...baseHeaders, 'x-device-token': deviceToken },
+    body: JSON.stringify({ action: 'control', deviceCode: 'VW-001' }),
+  }
+);
+const fastDisplayBody = await fastDisplayControl.json().catch(() => ({}));
 const validDisplayViews = ['menu', 'vitals', 'movement', 'status', 'medication'];
 const displayControlIsValid =
   typeof validDeviceBody?.control?.displayOn === 'boolean' &&
   validDisplayViews.includes(validDeviceBody?.control?.displayView);
+const fastDisplayControlIsValid =
+  fastDisplayControl.ok &&
+  typeof fastDisplayBody?.control?.displayOn === 'boolean' &&
+  validDisplayViews.includes(fastDisplayBody?.control?.displayView) &&
+  fastDisplayBody.medications === undefined;
+const medicationDatesAreValid =
+  Array.isArray(validDeviceBody.medications) &&
+  validDeviceBody.medications.every((medication) => /^\d{4}-\d{2}-\d{2}$/.test(medication.date));
 
 const wrongTelemetryToken = await fetch(
   `${supabaseUrl}/functions/v1/vitalwatch-device-telemetry`,
@@ -101,6 +118,8 @@ const checks = [
   ['ESP32 con token incorrecto', !wrongDeviceToken.ok, wrongDeviceToken.status],
   ['ESP32 con token correcto', validDeviceToken.ok, validDeviceToken.status],
   ['Contrato de control TFT', displayControlIsValid, validDeviceToken.status],
+  ['Control TFT rapido', fastDisplayControlIsValid, fastDisplayControl.status],
+  ['Fecha programada de medicamentos', medicationDatesAreValid, validDeviceToken.status],
   ['Telemetria con token incorrecto', !wrongTelemetryToken.ok, wrongTelemetryToken.status],
   ['Registro push sin sesion', !pushWithoutSession.ok, pushWithoutSession.status],
   ['Webhook con clave publica', !webhookWithPublicKey.ok, webhookWithPublicKey.status],

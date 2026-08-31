@@ -112,7 +112,8 @@ Firmware 0.9.0:
 - Conserva deteccion de movimiento e impacto con MPU compatible.
 - Usa la pantalla ST7735 de 1.44 pulgadas, SPI, 128 x 128.
 - Tiene menu: Signos, Movimiento, Estado y Medicacion.
-- Consulta medicamentos en Supabase cada 30 segundos.
+- Consulta medicamentos en Supabase cada 5 segundos.
+- Consulta las ordenes remotas de la TFT aproximadamente cada segundo.
 - Izquierda/derecha recorren medicamentos.
 - OK corto vuelve al menu.
 - OK mantenido marca el medicamento como tomado.

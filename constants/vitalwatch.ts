@@ -16,9 +16,19 @@ export type Medication = {
   id: string;
   name: string;
   dose: string;
+  date: string;
   time: string;
   status: 'Pendiente' | 'Tomado';
 };
+
+export function currentArgentinaDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
 
 export type UserProfile = {
   elderName: string;
@@ -71,6 +81,7 @@ export const initialMedications: Medication[] = [
     id: 'med-1',
     name: 'Losartan 50 mg',
     dose: '1 comprimido',
+    date: currentArgentinaDate(),
     time: '09:00',
     status: 'Pendiente',
   },
@@ -78,6 +89,7 @@ export const initialMedications: Medication[] = [
     id: 'med-2',
     name: 'Vitamina D',
     dose: '1 capsula',
+    date: currentArgentinaDate(),
     time: '13:00',
     status: 'Pendiente',
   },

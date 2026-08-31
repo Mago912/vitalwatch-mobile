@@ -11,7 +11,7 @@ desde el celular. Incluye:
 - tres botones de navegacion;
 - interfaz completa en la ST7735.
 
-Ademas, el ESP32 consulta los medicamentos de Supabase por WiFi cada 30 segundos.
+Ademas, el ESP32 consulta los medicamentos de Supabase por WiFi cada 5 segundos.
 La red corre en una tarea separada para que una conexion HTTPS lenta no detenga
 la adquisicion de los sensores. Desde el nuevo menu `MEDICACION` se pueden
 recorrer tratamientos y confirmar una toma con una pulsacion larga de OK.
@@ -97,7 +97,7 @@ puede cargar el firmware completo.
 2. Vincula la pulsera `VW-001` con su codigo de un solo uso.
 3. Agrega o edita un medicamento desde la app.
 4. En la pulsera, busca `MEDICACION` con izquierda/derecha y entra con OK.
-5. Espera hasta 30 segundos o reinicia el ESP32.
+5. Espera hasta 5 segundos o reinicia el ESP32.
 6. Comprueba que el medicamento aparece en la pantalla y el Monitor Serie.
 7. Manten presionado OK para marcar la toma.
 8. En la app, entra a Medicacion y toca `Actualizar` si el cambio todavia no
@@ -120,7 +120,7 @@ La placa de las fotos es SPI, 128x128 y usa la inicializacion
 | `VCC` | `3V3` | Alimentacion |
 
 Usa 3.3 V para mantener las senales al mismo nivel logico del ESP32. La pantalla
-muestra el primer medicamento pendiente, su hora, dosis y estado. Los botones
+muestra el primer medicamento pendiente, su fecha, hora, dosis y estado. Los botones
 izquierdo y derecho permiten recorrer toda la lista.
 
 ## Botones y sensores

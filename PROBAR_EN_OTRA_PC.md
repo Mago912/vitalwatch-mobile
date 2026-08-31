@@ -66,6 +66,7 @@ anterior. Para comprobar especificamente el portal nuevo:
 9. Prueba la deteccion de caida con movimientos controlados, sin golpear la placa.
 10. Confirma eventos y notificaciones en la aplicacion.
 11. En Configuracion, usa `Control de pantalla` para abrir cada vista de la TFT.
+    El cambio deberia verse aproximadamente en 1 o 2 segundos.
 12. Comprueba que la app muestre la vista como confirmada despues de la sincronizacion.
 
 Las mediciones son experimentales y no deben interpretarse como diagnostico

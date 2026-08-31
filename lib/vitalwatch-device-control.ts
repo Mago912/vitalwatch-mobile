@@ -62,3 +62,46 @@ export async function setRemoteDisplayView(
     reportedView: data.reported_display_view ?? null,
   };
 }
+
+export async function waitForRemoteDisplayConfirmation(
+  deviceId: number,
+  expectedOn: boolean,
+  expectedView: DeviceDisplayView
+) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await delay(750);
+    const { data, error } = await supabase
+      .from('devices')
+      .select(displayControlSelect)
+      .eq('id', deviceId)
+      .single();
+
+    if (error) {
+      throw new Error(`No se pudo confirmar la pantalla: ${error.message}`);
+    }
+
+    const control: DeviceDisplayControl = {
+      commandAt: data.display_command_at ?? null,
+      desiredOn: data.desired_display_on ?? expectedOn,
+      desiredView: data.desired_display_view ?? expectedView,
+      reportedAt: data.display_reported_at ?? null,
+      reportedOn: data.reported_display_on ?? null,
+      reportedView: data.reported_display_view ?? null,
+    };
+    const reportIsNew =
+      control.commandAt !== null &&
+      control.reportedAt !== null &&
+      new Date(control.reportedAt).getTime() >= new Date(control.commandAt).getTime();
+    const stateMatches =
+      control.reportedOn === expectedOn &&
+      (!expectedOn || control.reportedView === expectedView);
+
+    if (reportIsNew && stateMatches) return control;
+  }
+
+  return null;
+}
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}

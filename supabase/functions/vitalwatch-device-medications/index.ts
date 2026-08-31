@@ -2,7 +2,7 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { withSupabase } from '@supabase/server';
 
 type DevicePayload = {
-  action: 'list' | 'set_status';
+  action: 'control' | 'list' | 'set_status';
   deviceCode: string;
   reportedDisplayOn?: boolean;
   reportedDisplayView?: DisplayView;
@@ -16,6 +16,7 @@ type MedicationRow = {
   dose: string;
   id: number;
   name: string;
+  scheduled_date: string;
   scheduled_time: string;
 };
 
@@ -83,13 +84,19 @@ export default {
         await markMedicationTaken(context.supabaseAdmin, device, payload.medicationId!);
       }
 
+      const control = {
+        commandAt: device.display_command_at,
+        displayOn: device.desired_display_on ?? true,
+        displayView: device.desired_display_view ?? 'menu',
+      };
+
+      if (payload.action === 'control') {
+        return jsonResponse({ control });
+      }
+
       const medications = await listMedications(context.supabaseAdmin, device.user_id);
       return jsonResponse({
-        control: {
-          commandAt: device.display_command_at,
-          displayOn: device.desired_display_on ?? true,
-          displayView: device.desired_display_view ?? 'menu',
-        },
+        control,
         medications,
       });
     } catch (error) {
@@ -102,9 +109,10 @@ export default {
 async function listMedications(supabaseAdmin: any, userId: number) {
   const { data: medicationRows, error: medicationsError } = await supabaseAdmin
     .from('medications')
-    .select('id, name, dose, scheduled_time')
+    .select('id, name, dose, scheduled_date, scheduled_time')
     .eq('user_id', userId)
     .eq('active', true)
+    .order('scheduled_date', { ascending: true })
     .order('scheduled_time', { ascending: true });
 
   if (medicationsError) throw medicationsError;
@@ -120,12 +128,10 @@ async function listMedications(supabaseAdmin: any, userId: number) {
 
   if (logsError) throw logsError;
 
-  const today = argentinaDateKey(new Date().toISOString());
   const latestStatus = new Map<number, string>();
 
   for (const log of (logRows ?? []) as MedicationLogRow[]) {
-    const statusDate = log.taken_at ?? log.scheduled_for ?? log.created_at;
-    if (!latestStatus.has(log.medication_id) && argentinaDateKey(statusDate) === today) {
+    if (!latestStatus.has(log.medication_id)) {
       latestStatus.set(log.medication_id, log.status);
     }
   }
@@ -134,6 +140,7 @@ async function listMedications(supabaseAdmin: any, userId: number) {
     id: String(medication.id),
     name: medication.name,
     dose: medication.dose,
+    date: medication.scheduled_date,
     time: medication.scheduled_time.slice(0, 5),
     status: latestStatus.get(medication.id) === 'taken' ? 'Tomado' : 'Pendiente',
   }));
@@ -190,7 +197,7 @@ function isDevicePayload(payload: unknown): payload is DevicePayload {
     (value.reportedDisplayView === undefined || isDisplayView(value.reportedDisplayView));
 
   if (!baseIsValid) return false;
-  if (value.action === 'list') return true;
+  if (value.action === 'control' || value.action === 'list') return true;
 
   return (
     value.action === 'set_status' &&
@@ -207,13 +214,6 @@ function isDisplayView(value: unknown): value is DisplayView {
     value === 'status' ||
     value === 'medication'
   );
-}
-
-function argentinaDateKey(value: string) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date(value));
 }
 
 async function sha256(value: string) {
