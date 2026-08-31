@@ -14,7 +14,9 @@
 // lenta no interrumpe el muestreo continuo del MAX30102 ni del MPU.
 namespace MedicacionConfig {
   static constexpr uint8_t MAX_MEDICAMENTOS = 8;
-  static constexpr uint32_t INTERVALO_SINCRONIZACION_MS = 30000UL;
+  // Consulta medicamentos y ordenes remotas con una espera corta para que la
+  // pantalla responda rapido. La telemetria conserva su intervalo independiente.
+  static constexpr uint32_t INTERVALO_SINCRONIZACION_MS = 5000UL;
   static constexpr uint32_t INTERVALO_RECONEXION_WIFI_MS = 5000UL;
   static constexpr uint32_t TIMEOUT_HTTP_MS = 7000UL;
   static constexpr uint16_t TAMANO_PILA_TAREA = 16384;

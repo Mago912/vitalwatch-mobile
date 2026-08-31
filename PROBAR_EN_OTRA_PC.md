@@ -57,7 +57,7 @@ anterior. Para comprobar especificamente el portal nuevo:
 
 1. Abre la app VitalWatch e inicia sesion.
 2. En Medicacion, crea un medicamento de prueba.
-3. Espera hasta 30 segundos y comprueba que aparezca en la TFT.
+3. Espera hasta 5 segundos y comprueba que aparezca en la TFT.
 4. Manten OK en Medicacion para marcarlo como tomado.
 5. Comprueba en la app que el estado cambie.
 6. Coloca correctamente el dedo en el MAX30102 y observa pulso y SpO2.

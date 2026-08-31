@@ -9,7 +9,7 @@ VitalWatch 0.9.0 permite elegir desde la app que muestra la pantalla ST7735:
 - medicacion.
 
 Tambien se puede encender o dormir el controlador de la TFT. La orden se guarda
-en Supabase y el ESP32 la consulta junto con los medicamentos cada 30 segundos.
+en Supabase y el ESP32 la consulta junto con los medicamentos cada 5 segundos.
 La app distingue la orden solicitada del estado confirmado por la pulsera.
 
 ## Prioridades de seguridad
@@ -44,7 +44,7 @@ GND y usar una alimentacion de 3.3 V estable.
 2. Carga firmware 0.9.0 en el ESP32.
 3. Abre Configuracion en la app.
 4. Toca una vista en `Mostrar en la pulsera`.
-5. Espera hasta 30 segundos.
+5. Espera hasta 5 segundos.
 6. Comprueba la TFT y el texto `Confirmado por el ESP32`.
 
 El firmware anterior no reconoce estas ordenes. La app necesita que el ESP32
