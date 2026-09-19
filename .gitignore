@@ -66,3 +66,4 @@ app-example
 /ios
 /android
 .eas-temp/
+.expo-export-*/
