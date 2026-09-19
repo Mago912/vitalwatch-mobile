@@ -27,6 +27,9 @@ No borrar estas copias hasta subir y verificar la rama recuperada en GitHub.
 - Exportacion estatica Android: PASS.
 - Exportacion estatica iOS: PASS.
 - Laboratorio MAX30102: 26/26 pruebas.
+- Compilacion del firmware experimental MAX30102: PASS.
+  - Flash: 1.191.864 bytes, 90 %.
+  - RAM global: 60.856 bytes, 18 %.
 - Compilacion BIOSYS 1.0.8: PASS.
   - Flash: 1.178.888 bytes, 89 %.
   - RAM global: 54.704 bytes, 16 %.
