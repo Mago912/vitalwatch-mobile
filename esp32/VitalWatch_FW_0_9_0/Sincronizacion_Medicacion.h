@@ -14,8 +14,7 @@
 // lenta no interrumpe el muestreo continuo del MAX30102 ni del MPU.
 namespace MedicacionConfig {
   static constexpr uint8_t MAX_MEDICAMENTOS = 8;
-  static constexpr uint32_t INTERVALO_CONTROL_PANTALLA_MS = 1000UL;
-  static constexpr uint32_t INTERVALO_SINCRONIZACION_MS = 5000UL;
+  static constexpr uint32_t INTERVALO_SINCRONIZACION_MS = 30000UL;
   static constexpr uint32_t INTERVALO_RECONEXION_WIFI_MS = 5000UL;
   static constexpr uint32_t TIMEOUT_HTTP_MS = 7000UL;
   static constexpr uint16_t TAMANO_PILA_TAREA = 16384;
@@ -46,7 +45,6 @@ struct MedicamentoVitalWatch {
   uint32_t id;
   char nombre[30];
   char dosis[20];
-  char fecha[11];
   char hora[6];
   bool tomado;
 };
@@ -244,11 +242,6 @@ static inline bool guardarRespuestaMedicamentos(const String &respuesta) {
       item["dose"] | ""
     );
     copiarTextoSeguro(
-      nuevos[indice].fecha,
-      sizeof(nuevos[indice].fecha),
-      item["date"] | "----/--/--"
-    );
-    copiarTextoSeguro(
       nuevos[indice].hora,
       sizeof(nuevos[indice].hora),
       item["time"] | "--:--"
@@ -267,21 +260,6 @@ static inline bool guardarRespuestaMedicamentos(const String &respuesta) {
   interfazMedicacionPendiente = true;
   Serial.print(F("[INFO][MED] Medicamentos sincronizados: "));
   Serial.println(cantidad);
-  return true;
-}
-
-static inline bool guardarRespuestaControlPantalla(const String &respuesta) {
-  JsonDocument documento;
-  const DeserializationError error = deserializeJson(documento, respuesta);
-  if (error) return false;
-
-  const JsonObject control = documento["control"].as<JsonObject>();
-  if (control.isNull() || !control["displayOn"].is<bool>()) return false;
-
-  solicitarControlPantallaRemoto(
-    control["displayOn"].as<bool>(),
-    control["displayView"] | "menu"
-  );
   return true;
 }
 
@@ -395,16 +373,6 @@ static inline bool sincronizarMedicamentos(uint32_t medicamentoTomado = 0) {
   return true;
 }
 
-static inline bool sincronizarControlPantalla() {
-  JsonDocument solicitud;
-  solicitud["deviceCode"] = DEVICE_CODE;
-  solicitud["action"] = "control";
-
-  String respuesta;
-  return enviarSolicitudMedicacion(solicitud, respuesta) &&
-         guardarRespuestaControlPantalla(respuesta);
-}
-
 static inline bool conectarWiFiMedicacion() {
   if (WiFi.status() == WL_CONNECTED) return true;
 
@@ -422,7 +390,6 @@ static inline bool conectarWiFiMedicacion() {
 static void tareaSincronizacionMedicacion(void* parametro) {
   (void)parametro;
   uint32_t ultimaSincronizacion = 0;
-  uint32_t ultimaConsultaControl = 0;
 
   for (;;) {
     if (!conectarWiFiMedicacion()) {
@@ -445,12 +412,6 @@ static void tareaSincronizacionMedicacion(void* parametro) {
     } else if (consumirReportePantallaPendiente()) {
       sincronizarMedicamentos();
       ultimaSincronizacion = millis();
-      ultimaConsultaControl = ultimaSincronizacion;
-    } else if (ultimaConsultaControl == 0 ||
-               millis() - ultimaConsultaControl >=
-                 MedicacionConfig::INTERVALO_CONTROL_PANTALLA_MS) {
-      sincronizarControlPantalla();
-      ultimaConsultaControl = millis();
     } else if (ultimaSincronizacion == 0 ||
                millis() - ultimaSincronizacion >=
                  MedicacionConfig::INTERVALO_SINCRONIZACION_MS) {

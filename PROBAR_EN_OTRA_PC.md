@@ -1,4 +1,4 @@
-# Probar VitalWatch 0.9.0 en la otra computadora
+# Probar VitalWatch 0.9.1 en la otra computadora
 
 Este paquete actualiza una copia que ya tiene una version anterior. No contiene
 contrasenas, tokens, `.env.local`, `node_modules`, Arduino CLI ni compilaciones.
@@ -6,10 +6,13 @@ contrasenas, tokens, `.env.local`, `node_modules`, Arduino CLI ni compilaciones.
 ## Instalar la actualizacion
 
 1. Cierra Expo, Arduino IDE y el Monitor Serie.
-2. Extrae el ZIP dentro de la carpeta `vitalwatch-mobile` de la otra PC.
-3. Permite combinar carpetas y reemplazar los archivos incluidos en el ZIP.
-4. Abre PowerShell dentro de `vitalwatch-mobile`.
-5. Ejecuta:
+2. Conserva la carpeta anterior como respaldo; no la sobrescribas.
+3. Crea una carpeta nueva, por ejemplo `vitalwatch-mobile-1.0.3`.
+4. Extrae alli el ZIP.
+5. Copia desde la carpeta anterior `.env.local`, `google-services.json` y
+   `esp32/VitalWatch_FW_0_9_0/vitalwatch_config.h` si existen.
+6. Abre PowerShell dentro de la carpeta nueva.
+7. Ejecuta:
 
 ```powershell
 npm install
@@ -18,11 +21,11 @@ npm run firmware:prepare
 
 `firmware:prepare` realiza estas tareas:
 
-- conserva un `vitalwatch_config.h` de 0.9.0 si ya existe;
-- si falta, copia de forma local la configuracion privada de 0.8.0 o 0.7.0;
+- conserva un `vitalwatch_config.h` de 0.9.1 si ya existe;
+- si falta, copia la configuracion privada de 0.9.0, 0.8.0 o 0.7.0;
 - corrige las rutas de Arduino CLI para esa computadora;
 - instala o verifica el nucleo ESP32 y sus librerias;
-- compila firmware 0.9.0 sin cargar todavia la placa.
+- compila firmware 0.9.1 sin cargar todavia la placa.
 
 El script no muestra la clave WiFi ni el token del dispositivo.
 

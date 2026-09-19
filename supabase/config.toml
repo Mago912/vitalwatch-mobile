@@ -33,3 +33,21 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/vitalwatch-device-telemetry/deno.json"
 entrypoint = "./functions/vitalwatch-device-telemetry/index.ts"
+
+[functions.vitalwatch-device-messaging]
+enabled = true
+verify_jwt = false
+import_map = "./functions/vitalwatch-device-messaging/deno.json"
+entrypoint = "./functions/vitalwatch-device-messaging/index.ts"
+
+[functions.create-telegram-link]
+enabled = true
+verify_jwt = true
+import_map = "./functions/create-telegram-link/deno.json"
+entrypoint = "./functions/create-telegram-link/index.ts"
+
+[functions.telegram-vitalwatch-bot]
+enabled = true
+verify_jwt = false
+import_map = "./functions/telegram-vitalwatch-bot/deno.json"
+entrypoint = "./functions/telegram-vitalwatch-bot/index.ts"

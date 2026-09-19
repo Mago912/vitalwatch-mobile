@@ -1,0 +1,15 @@
+Laboratorio_Pruebas_MAX30102_2026-09-17
+Fecha local: 2026-09-18
+Target: esp32:esp32:esp32
+Arduino ESP32 core: 3.3.11
+Biblioteca MAX3010x: libraries/SparkFun_MAX3010x_Lab (copia controlada)
+Resultado: PASS (exit code 0)
+Build final: D:/vitalwatch-mobile/.arduino/build/lab-max30102-physical-v3
+Flash: 1191864 / 1310720 bytes (90%)
+RAM global: 60856 / 327680 bytes (18%)
+RAM restante estimada por linker: 266824 bytes
+Carga física COM3: PASS; hash de flash verificado por esptool.
+
+Advertencias heredadas no corregidas por estar fuera del alcance algorítmico:
+- variables estáticas sin uso en spo2_algorithm.h;
+- variable local sin uso en MAX30105::enableSlot().

@@ -3,8 +3,8 @@ param([string]$Ssid)
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$configPath = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_0\vitalwatch_config.h'
-$examplePath = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_0\vitalwatch_config.example.h'
+$configPath = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_1\vitalwatch_config.h'
+$examplePath = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_1\vitalwatch_config.example.h'
 
 function ConvertTo-CppString {
   param([string]$Value)

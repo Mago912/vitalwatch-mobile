@@ -7,6 +7,8 @@ type DeviceTelemetryPayload = {
   batteryLevel?: number | null;
   deviceCode: string;
   event?: TelemetryEvent;
+  eventId?: string;
+  eventOccurredAt?: number;
   heartRate?: number | null;
   impactValue?: number | null;
   performanceMode?: boolean;
@@ -27,7 +29,7 @@ export default {
 
       const { data: device, error: deviceError } = await context.supabaseAdmin
         .from('devices')
-        .select('id, device_token_hash')
+        .select('id, device_token_hash, connection_status')
         .eq('device_code', payload.deviceCode.trim())
         .maybeSingle();
 
@@ -59,9 +61,14 @@ export default {
       if (readingError) throw readingError;
 
       const deviceUpdate: Record<string, unknown> = {
+        connection_status: 'online',
         last_seen_at: recordedAt,
         performance_mode: payload.performanceMode ?? false,
       };
+
+      if (device.connection_status !== 'online') {
+        deviceUpdate.connection_status_changed_at = recordedAt;
+      }
 
       if (payload.batteryLevel !== null && payload.batteryLevel !== undefined) {
         deviceUpdate.current_battery = payload.batteryLevel;
@@ -74,10 +81,25 @@ export default {
 
       if (updateError) throw updateError;
 
+      if (device.connection_status === 'offline') {
+        const { error: recoveryError } = await context.supabaseAdmin.from('device_events').insert({
+          device_id: device.id,
+          type: 'device_online',
+          severity: 'info',
+          message: 'La pulsera volvio a comunicarse con Supabase.',
+          event_time: recordedAt,
+        });
+        if (recoveryError) throw recoveryError;
+      }
+
       if (payload.event) {
         const eventDefinition = TELEMETRY_EVENTS[payload.event];
-        const { error: eventError } = await context.supabaseAdmin.from('device_events').insert({
+        const eventTime = payload.eventOccurredAt
+          ? new Date(payload.eventOccurredAt * 1000).toISOString()
+          : recordedAt;
+        const eventRow = {
           device_id: device.id,
+          source_event_id: payload.eventId ?? null,
           type: payload.event,
           severity: eventDefinition.severity,
           message: eventDefinition.message,
@@ -85,19 +107,115 @@ export default {
           spo2: payload.spo2 ?? null,
           battery_level: payload.batteryLevel ?? null,
           impact_value: payload.impactValue ?? null,
-          event_time: recordedAt,
-        });
+          event_time: eventTime,
+        };
+        const eventQuery = payload.eventId
+          ? context.supabaseAdmin
+              .from('device_events')
+              .upsert(eventRow, { onConflict: 'device_id,source_event_id', ignoreDuplicates: true })
+          : context.supabaseAdmin.from('device_events').insert(eventRow);
+        const { error: eventError } = await eventQuery;
 
         if (eventError) throw eventError;
       }
 
-      return jsonResponse({ ok: true, recordedAt });
+      const confirmedAlerts = await createConfirmedVitalAlerts(
+        context.supabaseAdmin,
+        device.id,
+        recordedAt
+      );
+
+      return jsonResponse({ ok: true, recordedAt, confirmedAlerts });
     } catch (error) {
       console.error('vitalwatch-device-telemetry:', getErrorMessage(error));
       return jsonResponse({ error: 'No se pudo guardar la telemetria de la pulsera.' }, 500);
     }
   }),
 };
+
+// Umbrales de demostracion configurables. No representan diagnostico medico.
+// Una alerta exige tres lecturas validas consecutivas y tiene 10 minutos de
+// espera para evitar mensajes repetidos por el mismo episodio.
+const VITAL_CONFIRMATION = {
+  samples: 3,
+  windowMs: 30_000,
+  cooldownMs: 10 * 60_000,
+  heartRateLow: 50,
+  heartRateHigh: 110,
+  spo2Low: 92,
+};
+
+async function createConfirmedVitalAlerts(
+  supabaseAdmin: any,
+  deviceId: number,
+  recordedAt: string
+) {
+  const windowStart = new Date(Date.parse(recordedAt) - VITAL_CONFIRMATION.windowMs).toISOString();
+  const { data: readings, error: readingsError } = await supabaseAdmin
+    .from('sensor_readings')
+    .select('heart_rate, spo2, battery_level, impact_value, recorded_at')
+    .eq('device_id', deviceId)
+    .gte('recorded_at', windowStart)
+    .order('recorded_at', { ascending: false })
+    .limit(VITAL_CONFIRMATION.samples);
+  if (readingsError) throw readingsError;
+  if (!readings || readings.length < VITAL_CONFIRMATION.samples) return [];
+
+  const definitions = [
+    {
+      type: 'heart_rate_abnormal',
+      confirmed: readings.every(
+        (reading: { heart_rate: number | null }) =>
+          typeof reading.heart_rate === 'number' &&
+          (reading.heart_rate < VITAL_CONFIRMATION.heartRateLow ||
+            reading.heart_rate > VITAL_CONFIRMATION.heartRateHigh)
+      ),
+      message: 'Tres lecturas consecutivas de frecuencia cardiaca quedaron fuera del rango experimental.',
+    },
+    {
+      type: 'spo2_low',
+      confirmed: readings.every(
+        (reading: { spo2: number | null }) =>
+          typeof reading.spo2 === 'number' && reading.spo2 < VITAL_CONFIRMATION.spo2Low
+      ),
+      message: 'Tres lecturas consecutivas de SpO2 quedaron bajo el rango experimental.',
+    },
+  ];
+  const created: string[] = [];
+
+  for (const definition of definitions) {
+    if (!definition.confirmed) continue;
+
+    const cooldownStart = new Date(Date.parse(recordedAt) - VITAL_CONFIRMATION.cooldownMs).toISOString();
+    const { data: recentEvent, error: recentError } = await supabaseAdmin
+      .from('device_events')
+      .select('id')
+      .eq('device_id', deviceId)
+      .eq('type', definition.type)
+      .gte('event_time', cooldownStart)
+      .limit(1)
+      .maybeSingle();
+    if (recentError) throw recentError;
+    if (recentEvent) continue;
+
+    const newest = readings[0];
+    const { error: eventError } = await supabaseAdmin.from('device_events').insert({
+      device_id: deviceId,
+      type: definition.type,
+      severity: 'critical',
+      message: definition.message,
+      heart_rate: newest.heart_rate,
+      spo2: newest.spo2,
+      battery_level: newest.battery_level,
+      impact_value: newest.impact_value,
+      event_time: recordedAt,
+    });
+    if (eventError) throw eventError;
+    created.push(definition.type);
+  }
+
+  return created;
+}
 
 const TELEMETRY_EVENTS: Record<
   TelemetryEvent,
@@ -130,6 +248,21 @@ function isTelemetryPayload(payload: unknown): payload is DeviceTelemetryPayload
   if (!isOptionalNumberInRange(value.batteryLevel, 0, 100)) return false;
   if (!isOptionalNumberInRange(value.impactValue, 0, 32)) return false;
   if (value.performanceMode !== undefined && typeof value.performanceMode !== 'boolean') {
+    return false;
+  }
+  if (
+    value.eventId !== undefined &&
+    (typeof value.eventId !== 'string' || value.eventId.length < 8 || value.eventId.length > 100)
+  ) {
+    return false;
+  }
+  if (
+    value.eventOccurredAt !== undefined &&
+    (typeof value.eventOccurredAt !== 'number' ||
+      !Number.isInteger(value.eventOccurredAt) ||
+      value.eventOccurredAt < 1_700_000_000 ||
+      value.eventOccurredAt > Date.now() / 1000 + 300)
+  ) {
     return false;
   }
   if (

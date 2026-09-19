@@ -1,77 +1,99 @@
 import Constants from 'expo-constants';
-import { useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Linking from 'expo-linking';
+import { Href, useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import {
-  appColors,
-  DeviceConnection,
-  DeviceDisplayView,
-  deviceDisplayViews,
-} from '@/constants/vitalwatch';
+import { appColors } from '@/constants/vitalwatch';
 import { useAuth } from '@/providers/auth-provider';
 import { useVitalWatch } from '@/providers/vitalwatch-provider';
-
-const connectionModes: DeviceConnection['connectionMode'][] = ['Simulacion', 'WiFi', 'Bluetooth', 'API'];
+import { createTelegramLink, TelegramLink } from '@/lib/vitalwatch-telegram';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { session, signOut } = useAuth();
   const {
-    deviceConnection,
-    displayControl,
-    displayControlMessage,
-    isDisplayControlSyncing,
+    deleteEmergencyContact,
+    emergencyContacts,
+    emergencyContactSyncMessage,
     notificationPermission,
     profile,
     pushNotificationMessage,
     pushNotificationStatus,
     retryPushNotifications,
-    setDisplayEnabled,
-    setDisplayView,
-    updateDeviceConnection,
     updateProfile,
   } = useVitalWatch();
   const [elderName, setElderName] = useState(profile.elderName);
-  const [contactName, setContactName] = useState(profile.contactName);
-  const [contactInfo, setContactInfo] = useState(profile.contactInfo);
-  const [deviceName, setDeviceName] = useState(deviceConnection.deviceName);
-  const [connectionMode, setConnectionMode] =
-    useState<DeviceConnection['connectionMode']>(deviceConnection.connectionMode);
-  const [endpoint, setEndpoint] = useState(deviceConnection.endpoint);
+  const [contactError, setContactError] = useState('');
+  const [isCreatingTelegramLink, setIsCreatingTelegramLink] = useState(false);
+  const [telegramLink, setTelegramLink] = useState<TelegramLink | null>(null);
+  const [telegramStatusMessage, setTelegramStatusMessage] = useState('');
+  const telegramContactsAtStart = useRef<Set<string>>(new Set());
   const isRegisteringPushNotifications = pushNotificationStatus === 'Registrando';
   const appVersion = Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? 'desarrollo';
   const buildVersion = Constants.nativeBuildVersion ?? 'sin numero';
-
-  function displayViewLabel(view: DeviceDisplayView | null) {
-    if (!view) return 'Sin confirmacion todavia';
-    return deviceDisplayViews.find((option) => option.value === view)?.label ?? view;
-  }
+  const telegramContacts = useMemo(
+    () => emergencyContacts.filter((contact) => contact.channel === 'telegram'),
+    [emergencyContacts]
+  );
 
   useEffect(() => {
     setElderName(profile.elderName);
-    setContactName(profile.contactName);
-    setContactInfo(profile.contactInfo);
   }, [profile]);
 
   useEffect(() => {
-    setDeviceName(deviceConnection.deviceName);
-    setConnectionMode(deviceConnection.connectionMode);
-    setEndpoint(deviceConnection.endpoint);
-  }, [deviceConnection]);
+    if (!telegramLink) return;
+
+    const linkedContact = telegramContacts.find(
+      (contact) => !telegramContactsAtStart.current.has(contact.id)
+    );
+    if (!linkedContact) return;
+
+    setTelegramLink(null);
+    setTelegramStatusMessage(`${linkedContact.name} quedo vinculado para recibir alertas.`);
+  }, [telegramContacts, telegramLink]);
 
   function handleSave() {
     updateProfile({
+      ...profile,
       elderName,
-      contactName,
-      contactInfo,
     });
   }
 
-  function handleSaveDeviceConnection() {
-    updateDeviceConnection({
-      deviceName,
-      connectionMode,
-      endpoint,
-    });
+  async function handleCreateTelegramLink() {
+    if (!session) {
+      setContactError('Inicia sesion para vincular Telegram.');
+      return;
+    }
+
+    setIsCreatingTelegramLink(true);
+    try {
+      const link = await createTelegramLink(session.access_token);
+      telegramContactsAtStart.current = new Set(telegramContacts.map((contact) => contact.id));
+      setTelegramLink(link);
+      setContactError('');
+      setTelegramStatusMessage('Codigo listo. Abri Telegram y toca INICIAR.');
+    } catch (error) {
+      setContactError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsCreatingTelegramLink(false);
+    }
+  }
+
+  async function handleOpenTelegram() {
+    if (!telegramLink) return;
+    try {
+      await Linking.openURL(
+        `https://t.me/${telegramLink.botUsername}?start=${encodeURIComponent(telegramLink.code)}`
+      );
+      setContactError('');
+    } catch {
+      setContactError('No se pudo abrir Telegram. Usa el comando manual que aparece debajo.');
+    }
+  }
+
+  function handleDeleteEmergencyContact(id: string) {
+    void deleteEmergencyContact(id);
   }
 
   return (
@@ -82,118 +104,99 @@ export default function SettingsScreen() {
       <View>
         <Text style={styles.appName}>VitalWatch</Text>
         <Text style={styles.title}>Configuracion</Text>
-        <Text style={styles.subtitle}>Datos del usuario, la pulsera y la cuenta responsable.</Text>
+        <Text style={styles.subtitle}>Datos del usuario, contactos y alertas.</Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Control de pantalla</Text>
+        <Text style={styles.sectionTitle}>Contactos</Text>
         <Text style={styles.sectionHelp}>
-          Elegí qué información querés ver en la TFT. El ESP32 sigue midiendo y enviando alertas,
-          y una caída o SOS siempre tiene prioridad. La orden puede tardar hasta 30 segundos.
+          Administra los nombres y telefonos autorizados que la pulsera puede mostrar. El numero
+          permanece dentro de la app y Supabase.
         </Text>
-
-        <View style={styles.displayStatusBox}>
-          <Text style={styles.displayStatusLabel}>Orden solicitada</Text>
-          <Text style={styles.displayStatusValue}>
-            {displayControl.desiredOn ? 'Pantalla encendida' : 'Pantalla apagada'}
-          </Text>
-          <Text style={styles.displayStatusLabel}>Vista solicitada</Text>
-          <Text style={styles.displayStatusValue}>
-            {displayViewLabel(displayControl.desiredView)}
-          </Text>
-          <Text style={styles.displayStatusLabel}>Confirmado por el ESP32</Text>
-          <Text style={styles.displayStatusValue}>
-            {displayControl.reportedOn === null
-              ? 'Sin confirmacion todavia'
-              : displayControl.reportedOn
-                ? `Encendida: ${displayViewLabel(displayControl.reportedView)}`
-                : 'Pantalla apagada'}
-          </Text>
-        </View>
-
-        <Text style={styles.sectionHelp}>{displayControlMessage}</Text>
-
-        <View style={styles.displayActions}>
-          <Pressable
-            disabled={isDisplayControlSyncing}
-            onPress={() => void setDisplayEnabled(true)}
-            style={({ pressed }) => [
-              styles.displayButton,
-              styles.displayButtonOn,
-              pressed && styles.displayButtonPressed,
-              isDisplayControlSyncing && styles.outlineButtonDisabled,
-            ]}>
-            <Text style={styles.displayButtonText}>Encender</Text>
-          </Pressable>
-          <Pressable
-            disabled={isDisplayControlSyncing}
-            onPress={() => void setDisplayEnabled(false)}
-            style={({ pressed }) => [
-              styles.displayButton,
-              styles.displayButtonOff,
-              pressed && styles.displayButtonPressed,
-              isDisplayControlSyncing && styles.outlineButtonDisabled,
-            ]}>
-            <Text style={styles.displayButtonText}>Apagar</Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.displayPickerTitle}>Mostrar en la pulsera</Text>
-        <View style={styles.displayViewGrid}>
-          {deviceDisplayViews.map((option) => {
-            const isActive = displayControl.desiredOn && displayControl.desiredView === option.value;
-
-            return (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected: isActive }}
-                disabled={isDisplayControlSyncing}
-                key={option.value}
-                onPress={() => void setDisplayView(option.value)}
-                style={({ pressed }) => [
-                  styles.displayViewButton,
-                  isActive && styles.displayViewButtonActive,
-                  pressed && styles.displayButtonPressed,
-                  isDisplayControlSyncing && styles.outlineButtonDisabled,
-                ]}>
-                <Text
-                  style={[
-                    styles.displayViewButtonText,
-                    isActive && styles.displayViewButtonTextActive,
-                  ]}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <Text style={styles.hardwareWarning}>
-          Con LED conectado directo a 3V3, el controlador se duerme pero la luz puede seguir
-          encendida. Para ahorrar realmente se necesita controlar LED con un MOSFET.
-        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/contacts' as Href)}
+          style={({ pressed }) => [styles.outlineButton, pressed && styles.outlineButtonPressed]}>
+          <Text style={styles.outlineButtonText}>Abrir Contactos</Text>
+        </Pressable>
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Alertas por Telegram</Text>
+        <Text style={styles.sectionHelp}>
+          Cada familiar vincula su chat una sola vez. Las alertas se envian desde Supabase aunque
+          esta aplicacion este cerrada.
+        </Text>
+
+        {telegramContacts.map((contact) => (
+          <View key={contact.id} style={styles.emergencyContactRow}>
+            <View style={styles.emergencyContactText}>
+              <Text style={styles.emergencyContactName}>{contact.name}</Text>
+              <Text style={styles.emergencyContactPhone}>
+                {contact.telegramUsername ? `@${contact.telegramUsername}` : 'Chat privado vinculado'}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel={`Eliminar a ${contact.name}`}
+              accessibilityRole="button"
+              onPress={() => handleDeleteEmergencyContact(contact.id)}
+              style={({ pressed }) => [styles.deleteContactButton, pressed && styles.buttonPressed]}>
+              <Text style={styles.deleteContactText}>Eliminar</Text>
+            </Pressable>
+          </View>
+        ))}
+
+        {telegramContacts.length === 0 ? (
+          <Text style={styles.sectionHelp}>Todavia no hay chats de Telegram vinculados.</Text>
+        ) : null}
+
+        <Pressable
+          disabled={isCreatingTelegramLink}
+          onPress={() => void handleCreateTelegramLink()}
+          style={({ pressed }) => [
+            styles.saveButton,
+            { backgroundColor: pressed ? '#075985' : appColors.primary },
+            isCreatingTelegramLink && styles.outlineButtonDisabled,
+          ]}>
+          <Text style={styles.saveButtonText}>
+            {isCreatingTelegramLink ? 'Generando...' : 'Vincular un familiar'}
+          </Text>
+        </Pressable>
+
+        {telegramLink ? (
+          <View style={styles.telegramLinkBox}>
+            <Text style={styles.inputLabel}>Codigo temporal</Text>
+            <Text selectable style={styles.telegramCode}>{telegramLink.code}</Text>
+            <Text style={styles.sectionHelp}>
+              Abri Telegram y toca INICIAR. El codigo se enviara automaticamente y vence en 10 minutos.
+            </Text>
+            <Pressable
+              onPress={() => void handleOpenTelegram()}
+              style={({ pressed }) => [styles.outlineButton, pressed && styles.outlineButtonPressed]}>
+              <Text style={styles.outlineButtonText}>Abrir y vincular en Telegram</Text>
+            </Pressable>
+            <Text selectable style={styles.manualCommand}>
+              Alternativa manual: /vincular {telegramLink.code}
+            </Text>
+          </View>
+        ) : null}
+        {telegramStatusMessage ? (
+          <Text accessibilityLiveRegion="polite" style={styles.successText}>
+            {telegramStatusMessage}
+          </Text>
+        ) : null}
+        {contactError ? <Text style={styles.errorText}>{contactError}</Text> : null}
+        <Text style={styles.sectionHelp}>{emergencyContactSyncMessage}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Datos del usuario</Text>
         <InputField
           label="Nombre del adulto mayor"
           value={elderName}
           onChangeText={setElderName}
           placeholder="Ej: Alicia Gomez"
         />
-        <InputField
-          label="Contacto responsable"
-          value={contactName}
-          onChangeText={setContactName}
-          placeholder="Ej: Mariana Gomez"
-        />
-        <InputField
-          label="Telefono o correo"
-          value={contactInfo}
-          onChangeText={setContactInfo}
-          placeholder="Ej: +54 9 11 5555-1234"
-        />
-
         <Pressable
           onPress={handleSave}
           style={({ pressed }) => [
@@ -201,57 +204,6 @@ export default function SettingsScreen() {
             { backgroundColor: pressed ? '#075985' : appColors.primary },
           ]}>
           <Text style={styles.saveButtonText}>Guardar cambios</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Pulsera y ESP32</Text>
-        <Text style={styles.sectionHelp}>
-          La cuenta ya esta vinculada con la pulsera mediante Supabase. Estos campos describen
-          como queres identificar y conectar el hardware durante las pruebas.
-        </Text>
-
-        <InputField
-          label="Nombre del dispositivo"
-          value={deviceName}
-          onChangeText={setDeviceName}
-          placeholder="Ej: Pulsera VitalWatch ESP32"
-        />
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Modo de conexion</Text>
-          <View style={styles.modeGrid}>
-            {connectionModes.map((mode) => {
-              const isSelected = connectionMode === mode;
-
-              return (
-                <Pressable
-                  key={mode}
-                  onPress={() => setConnectionMode(mode)}
-                  style={[styles.modeButton, isSelected ? styles.modeButtonActive : undefined]}>
-                  <Text style={[styles.modeText, isSelected ? styles.modeTextActive : undefined]}>
-                    {mode}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <InputField
-          label="IP o URL del dispositivo"
-          value={endpoint}
-          onChangeText={setEndpoint}
-          placeholder="Ej: http://192.168.4.1/estado"
-        />
-
-        <Pressable
-          onPress={handleSaveDeviceConnection}
-          style={({ pressed }) => [
-            styles.saveButton,
-            { backgroundColor: pressed ? '#075985' : appColors.primary },
-          ]}>
-          <Text style={styles.saveButtonText}>Guardar datos de pulsera</Text>
         </Pressable>
       </View>
 
@@ -293,15 +245,15 @@ export default function SettingsScreen() {
             styles.systemSettingsButton,
             pressed && styles.systemSettingsButtonPressed,
           ]}>
-          <Text style={styles.systemSettingsButtonText}>Abrir permisos de Android</Text>
+          <Text style={styles.systemSettingsButtonText}>Abrir permisos del sistema</Text>
         </Pressable>
       </View>
 
       <View style={styles.noteCard}>
         <Text style={styles.noteTitle}>Importante</Text>
         <Text style={styles.noteText}>
-          Los datos del contacto siguen siendo informativos. Las alertas remotas ya se envian al
-          celular mediante Supabase y Expo, pero todavia no mandan SMS ni correos.
+          Telegram recibe los avisos directamente desde Supabase. Funciona con la app cerrada siempre
+          que la pulsera y el servicio de Telegram tengan acceso a Internet.
         </Text>
       </View>
 
@@ -319,11 +271,13 @@ export default function SettingsScreen() {
 }
 
 function InputField({
+  keyboardType = 'default',
   label,
   onChangeText,
   placeholder,
   value,
 }: {
+  keyboardType?: 'default' | 'phone-pad';
   label: string;
   onChangeText: (text: string) => void;
   placeholder: string;
@@ -333,6 +287,7 @@ function InputField({
     <View style={styles.inputGroup}>
       <Text style={styles.inputLabel}>{label}</Text>
       <TextInput
+        keyboardType={keyboardType}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -392,6 +347,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  errorText: {
+    color: '#B91C1C',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  successText: {
+    color: '#047857',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  manualCommand: {
+    color: appColors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   inputGroup: {
     gap: 8,
   },
@@ -410,34 +380,6 @@ const styles = StyleSheet.create({
     minHeight: 54,
     paddingHorizontal: 14,
   },
-  modeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  modeButton: {
-    backgroundColor: '#F8FAFC',
-    borderColor: appColors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    minHeight: 48,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderCurve: 'continuous',
-  },
-  modeButtonActive: {
-    backgroundColor: '#E0F2FE',
-    borderColor: appColors.primary,
-  },
-  modeText: {
-    color: appColors.muted,
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  modeTextActive: {
-    color: '#075985',
-  },
   saveButton: {
     minHeight: 58,
     borderRadius: 18,
@@ -455,92 +397,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
-  },
-  displayStatusBox: {
-    backgroundColor: '#F8FAFC',
-    borderColor: appColors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 4,
-    padding: 14,
-  },
-  displayStatusLabel: {
-    color: appColors.muted,
-    fontSize: 13,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  displayStatusValue: {
-    color: appColors.text,
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  displayActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  displayPickerTitle: {
-    color: appColors.text,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  displayViewGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  displayViewButton: {
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderColor: appColors.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 54,
-    paddingHorizontal: 12,
-    width: '48%',
-  },
-  displayViewButtonActive: {
-    backgroundColor: '#E0F2FE',
-    borderColor: appColors.primary,
-    borderWidth: 2,
-  },
-  displayViewButtonText: {
-    color: appColors.text,
-    fontSize: 15,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  displayViewButtonTextActive: {
-    color: '#075985',
-  },
-  displayButton: {
-    alignItems: 'center',
-    borderRadius: 8,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 56,
-    padding: 12,
-  },
-  displayButtonOn: {
-    backgroundColor: '#0E9F6E',
-  },
-  displayButtonOff: {
-    backgroundColor: '#475569',
-  },
-  displayButtonPressed: {
-    opacity: 0.72,
-  },
-  displayButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  hardwareWarning: {
-    color: '#92400E',
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 20,
   },
   pushStatusDot: {
     borderRadius: 999,
@@ -629,4 +485,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
+  emergencyContactRow: {
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: appColors.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+  },
+  emergencyContactText: { flex: 1 },
+  emergencyContactName: { color: appColors.text, fontSize: 16, fontWeight: '900' },
+  emergencyContactPhone: { color: appColors.muted, fontSize: 14, marginTop: 2 },
+  telegramLinkBox: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#93C5FD',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  telegramCode: {
+    color: appColors.text,
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  deleteContactButton: {
+    alignItems: 'center',
+    borderColor: '#DC2626',
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 10,
+  },
+  deleteContactText: { color: '#B91C1C', fontSize: 14, fontWeight: '900' },
+  buttonPressed: { opacity: 0.65 },
 });

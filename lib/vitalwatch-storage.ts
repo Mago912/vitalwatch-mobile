@@ -1,12 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { currentArgentinaDate } from '@/constants/vitalwatch';
-import type { DeviceConnection, EventItem, Medication, UserProfile } from '@/constants/vitalwatch';
+import type {
+  EmergencyContact,
+  EventItem,
+  Medication,
+  UserProfile,
+} from '@/constants/vitalwatch';
 
 const PROFILE_KEY = 'vitalwatch.profile';
 const MEDICATIONS_KEY = 'vitalwatch.medications';
 const HISTORY_KEY = 'vitalwatch.history';
-const DEVICE_CONNECTION_KEY = 'vitalwatch.deviceConnection';
+const EMERGENCY_CONTACTS_KEY = 'vitalwatch.emergencyContacts';
 
 // Lee un valor guardado. Si no existe o hay error, devuelve el valor inicial.
 async function loadJson<T>(key: string, fallback: T): Promise<T> {
@@ -42,18 +47,20 @@ export function saveMedications(medications: Medication[]) {
   return saveJson(MEDICATIONS_KEY, medications);
 }
 
-export function loadHistory(fallback: EventItem[]) {
-  return loadJson(HISTORY_KEY, fallback);
+export async function loadHistory(fallback: EventItem[]) {
+  const history = await loadJson<EventItem[]>(HISTORY_KEY, fallback);
+  // Elimina únicamente el evento fijo que traía la plantilla inicial.
+  return history.filter((event) => event.id !== 'event-demo-1');
 }
 
 export function saveHistory(history: EventItem[]) {
   return saveJson(HISTORY_KEY, history);
 }
 
-export function loadDeviceConnection(fallback: DeviceConnection) {
-  return loadJson(DEVICE_CONNECTION_KEY, fallback);
+export function loadEmergencyContacts(fallback: EmergencyContact[]) {
+  return loadJson(EMERGENCY_CONTACTS_KEY, fallback);
 }
 
-export function saveDeviceConnection(deviceConnection: DeviceConnection) {
-  return saveJson(DEVICE_CONNECTION_KEY, deviceConnection);
+export function saveEmergencyContacts(contacts: EmergencyContact[]) {
+  return saveJson(EMERGENCY_CONTACTS_KEY, contacts);
 }

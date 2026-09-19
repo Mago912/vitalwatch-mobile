@@ -5,19 +5,15 @@ import { useVitalWatch } from '@/providers/vitalwatch-provider';
 
 export default function HomeScreen() {
   const {
-    activateFall,
-    activateLowBattery,
-    activateMedicationReminder,
-    activateNormal,
-    activateSos,
+    backendReachable,
     battery,
-    dataSource,
     history,
     isSyncing,
     lastUpdated,
     notificationPermission,
     profile,
     pushNotificationStatus,
+    readingStatus,
     refreshRemoteData,
     status,
     syncError,
@@ -25,8 +21,32 @@ export default function HomeScreen() {
   } = useVitalWatch();
 
   const currentStatus = statusStyles[status];
+  const readingColor =
+    readingStatus === 'Reciente' || readingStatus === 'Simulada'
+      ? '#0E9F6E'
+      : readingStatus === 'Sin comunicacion' || readingStatus === 'Sin conexion'
+        ? '#DC2626'
+        : '#F59E0B';
+  const readingSoftColor =
+    readingStatus === 'Reciente' || readingStatus === 'Simulada'
+      ? '#DCFCE7'
+      : readingStatus === 'Sin comunicacion' || readingStatus === 'Sin conexion'
+        ? '#FEE2E2'
+        : '#FEF3C7';
+  const readingTextColor =
+    readingStatus === 'Reciente' || readingStatus === 'Simulada'
+      ? '#064E3B'
+      : readingStatus === 'Sin comunicacion' || readingStatus === 'Sin conexion'
+        ? '#7F1D1D'
+        : '#78350F';
   const trendLabel =
-    vitals.trend === 'sube' ? 'Subiendo' : vitals.trend === 'baja' ? 'Bajando' : 'Estable';
+    vitals.trend === 'sin datos'
+      ? 'Sin datos'
+      : vitals.trend === 'sube'
+      ? 'Subiendo'
+      : vitals.trend === 'baja'
+        ? 'Bajando'
+        : 'Estable';
 
   return (
     <ScrollView
@@ -36,7 +56,9 @@ export default function HomeScreen() {
       <View>
         <Text style={styles.appName}>VitalWatch</Text>
         <Text style={styles.title}>Panel principal</Text>
-        <Text style={styles.subtitle}>Adulto mayor: {profile.elderName}</Text>
+        <Text style={styles.subtitle}>
+          Adulto mayor: {profile.elderName || 'Sin configurar'}
+        </Text>
       </View>
 
       <View style={[styles.statusCard, { backgroundColor: currentStatus.softColor }]}>
@@ -49,16 +71,22 @@ export default function HomeScreen() {
 
       <View style={styles.liveHeader}>
         <View>
-          <Text style={styles.sectionTitle}>Signos vitales en vivo</Text>
+          <Text style={styles.sectionTitle}>Signos vitales</Text>
           <Text style={styles.sectionHelp}>
-            {dataSource === 'Supabase'
-              ? 'Lecturas obtenidas desde la base de datos.'
-              : 'Lecturas simuladas actualizadas automaticamente.'}
+            {readingStatus === 'Reciente'
+              ? 'Lectura reciente recibida. Uso experimental.'
+              : readingStatus === 'Demorada'
+                ? 'La ultima lectura es antigua y no se muestra como actual.'
+                : readingStatus === 'Sin comunicacion'
+                  ? 'La pulsera no esta enviando datos. Revisa su energia y conexion.'
+                  : readingStatus === 'Sin conexion'
+                    ? 'No se pudo consultar la base de datos.'
+                    : 'Todavia no se recibieron lecturas validas.'}
           </Text>
         </View>
-        <View style={styles.liveBadge}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveText}>{dataSource}</Text>
+        <View style={[styles.liveBadge, { backgroundColor: readingSoftColor }]}>
+          <View style={[styles.liveDot, { backgroundColor: readingColor }]} />
+          <Text style={[styles.liveText, { color: readingTextColor }]}>{readingStatus}</Text>
         </View>
       </View>
 
@@ -68,7 +96,7 @@ export default function HomeScreen() {
           label="Ritmo cardiaco"
           max={130}
           min={50}
-          normalText="Normal: 60 a 100 lpm"
+          normalText="Lectura experimental"
           unit="lpm"
           value={vitals.heartRate}
         />
@@ -77,7 +105,7 @@ export default function HomeScreen() {
           label="Oxigeno"
           max={100}
           min={85}
-          normalText="Normal: 95% o mas"
+          normalText="Lectura experimental"
           unit="%"
           value={vitals.oxygen}
         />
@@ -97,14 +125,15 @@ export default function HomeScreen() {
       <View style={styles.infoGrid}>
         <View style={styles.infoCard}>
           <Text style={styles.infoLabel}>Bateria pulsera</Text>
-          <Text style={styles.infoValue}>{battery}%</Text>
+          <Text style={styles.infoValue}>{battery === null ? '--' : `${battery}%`}</Text>
+          {battery === null ? <Text style={styles.permissionText}>Sin lectura de bateria</Text> : null}
           <View style={styles.batteryTrack}>
             <View
               style={[
                 styles.batteryFill,
                 {
-                  width: `${battery}%`,
-                  backgroundColor: battery <= 20 ? appColors.danger : currentStatus.color,
+                  width: `${battery ?? 0}%`,
+                  backgroundColor: battery !== null && battery <= 20 ? appColors.danger : currentStatus.color,
                 },
               ]}
             />
@@ -118,7 +147,9 @@ export default function HomeScreen() {
             Notificaciones: {notificationPermission ? 'activas' : 'sin permiso'}
           </Text>
           <Text style={styles.permissionText}>Push remotas: {pushNotificationStatus}</Text>
-          <Text style={styles.permissionText}>Fuente: {dataSource}</Text>
+          <Text style={styles.permissionText}>
+            Base de datos: {backendReachable ? 'disponible' : 'sin conexion'}
+          </Text>
           {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
           <Pressable
             disabled={isSyncing}
@@ -135,26 +166,10 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Simular eventos</Text>
-        <Text style={styles.sectionHelp}>
-          Estos botones imitan lo que mas adelante enviara la pulsera con ESP32.
-        </Text>
-
-        <View style={styles.buttonGrid}>
-          <ActionButton color="#0E9F6E" label="Estado normal" onPress={activateNormal} />
-          <ActionButton color="#EA580C" label="Simular caida" onPress={activateFall} />
-          <ActionButton color="#DC2626" label="Activar SOS" onPress={activateSos} />
-          <ActionButton color="#F59E0B" label="Bateria baja" onPress={activateLowBattery} />
-          <ActionButton
-            color="#6D28D9"
-            label="Medicacion pendiente"
-            onPress={activateMedicationReminder}
-          />
-        </View>
-      </View>
-
-      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Ultimos eventos</Text>
+        {history.length === 0 ? (
+          <Text style={styles.sectionHelp}>Todavia no hay eventos registrados.</Text>
+        ) : null}
         {history.slice(0, 3).map((event) => (
           <View key={event.id} style={styles.eventRow}>
             <View style={styles.eventDot} />
@@ -185,45 +200,22 @@ function VitalCard({
   min: number;
   normalText: string;
   unit: string;
-  value: number;
+  value: number | null;
 }) {
-  const progress = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+  const progress = value === null ? 0 : Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
 
   return (
     <View style={styles.vitalCard}>
       <Text style={styles.vitalLabel}>{label}</Text>
       <View style={styles.vitalValueRow}>
-        <Text style={styles.vitalValue}>{value}</Text>
-        <Text style={styles.vitalUnit}>{unit}</Text>
+        <Text style={styles.vitalValue}>{value ?? '--'}</Text>
+        {value !== null ? <Text style={styles.vitalUnit}>{unit}</Text> : null}
       </View>
       <View style={styles.vitalTrack}>
         <View style={[styles.vitalFill, { width: `${progress}%`, backgroundColor: color }]} />
       </View>
-      <Text style={styles.vitalNormal}>{normalText}</Text>
+      <Text style={styles.vitalNormal}>{value === null ? 'Sin lectura valida' : normalText}</Text>
     </View>
-  );
-}
-
-function ActionButton({
-  color,
-  label,
-  onPress,
-}: {
-  color: string;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        {
-          backgroundColor: pressed ? '#334155' : color,
-        },
-      ]}>
-      <Text style={styles.actionButtonText}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -272,10 +264,12 @@ const styles = StyleSheet.create({
   },
   infoGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   infoCard: {
     flex: 1,
+    minWidth: 150,
     backgroundColor: appColors.card,
     borderColor: appColors.border,
     borderRadius: 22,
@@ -357,6 +351,7 @@ const styles = StyleSheet.create({
   },
   liveHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
@@ -470,23 +465,6 @@ const styles = StyleSheet.create({
     color: appColors.text,
     fontSize: 15,
     fontWeight: '900',
-  },
-  buttonGrid: {
-    gap: 10,
-  },
-  actionButton: {
-    minHeight: 58,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
-    borderCurve: 'continuous',
-  },
-  actionButtonText: {
-    color: appColors.buttonText,
-    fontSize: 17,
-    fontWeight: '900',
-    textAlign: 'center',
   },
   eventRow: {
     flexDirection: 'row',

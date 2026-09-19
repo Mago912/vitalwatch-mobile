@@ -15,7 +15,6 @@ function createEmptyForm() {
 
 export default function MedicationScreen() {
   const {
-    activateMedicationReminder,
     addMedication,
     deleteMedication,
     isMedicationSyncing,
@@ -203,6 +202,13 @@ export default function MedicationScreen() {
           <Text style={styles.helpText}>Todavia no hay medicamentos cargados.</Text>
         ) : null}
 
+        {medications.length > 0 ? (
+          <Text style={styles.helpText}>
+            Cada tarjeta permite alternar su estado: una toma confirmada puede volver a pendiente
+            para corregirla o probar nuevamente la pulsera.
+          </Text>
+        ) : null}
+
         {medications.map((medication) => {
           const isTaken = medication.status === 'Tomado';
 
@@ -235,7 +241,7 @@ export default function MedicationScreen() {
                     isMedicationSyncing && styles.disabledButton,
                   ]}>
                   <Text style={styles.primaryButtonText}>
-                    {isTaken ? 'Volver a pendiente' : 'Marcar como tomado'}
+                    {isTaken ? 'Cambiar a pendiente' : 'Marcar como tomado'}
                   </Text>
                 </Pressable>
 
@@ -259,21 +265,6 @@ export default function MedicationScreen() {
         })}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Simular recordatorio</Text>
-        <Text style={styles.helpText}>
-          Este boton cambia el estado principal a medicacion pendiente, agrega un evento al historial
-          y muestra una notificacion local.
-        </Text>
-        <Pressable
-          onPress={activateMedicationReminder}
-          style={({ pressed }) => [
-            styles.reminderButton,
-            { backgroundColor: pressed ? '#4C1D95' : '#6D28D9' },
-          ]}>
-          <Text style={styles.primaryButtonText}>Simular recordatorio de medicacion</Text>
-        </Pressable>
-      </View>
     </ScrollView>
   );
 }
@@ -484,14 +475,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 12,
-    borderCurve: 'continuous',
-  },
-  reminderButton: {
-    minHeight: 58,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
     borderCurve: 'continuous',
   },
   saveButton: {

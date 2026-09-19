@@ -102,6 +102,52 @@ export async function waitForRemoteDisplayConfirmation(
   return null;
 }
 
+export async function sendRemoteOk(deviceId: number) {
+  const commandAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('devices')
+    .update({
+      desired_input_action: 'ok',
+      input_command_at: commandAt,
+    })
+    .eq('id', deviceId)
+    .select('input_command_at')
+    .single();
+
+  if (error) {
+    throw new Error(`No se pudo enviar OK a la pulsera: ${error.message}`);
+  }
+
+  return data.input_command_at ?? commandAt;
+}
+
+export async function waitForRemoteAlertDismissal(deviceId: number, commandAt: string) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await delay(750);
+    const { data, error } = await supabase
+      .from('devices')
+      .select('reported_alert_state, alert_reported_at, input_reported_at')
+      .eq('id', deviceId)
+      .single();
+
+    if (error) {
+      throw new Error(`No se pudo confirmar el cierre de la alerta: ${error.message}`);
+    }
+
+    const inputWasHandled =
+      data.input_reported_at !== null &&
+      new Date(data.input_reported_at).getTime() >= new Date(commandAt).getTime();
+    const alertWasCleared =
+      data.reported_alert_state === 'none' &&
+      data.alert_reported_at !== null &&
+      new Date(data.alert_reported_at).getTime() >= new Date(commandAt).getTime();
+
+    if (inputWasHandled && alertWasCleared) return true;
+  }
+
+  return false;
+}
+
 function delay(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

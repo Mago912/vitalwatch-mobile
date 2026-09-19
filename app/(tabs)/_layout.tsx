@@ -42,12 +42,22 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="watch"
+        options={{
+          title: 'Pulsera',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="applewatch" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Config',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
         }}
       />
+      {/* VW-APP-03 — Rutas internas: no agregan botones a la barra existente. */}
+      <Tabs.Screen name="contacts" options={{ href: null }} />
+      <Tabs.Screen name="event/[eventId]" options={{ href: null }} />
     </Tabs>
     </VitalWatchProvider>
   );

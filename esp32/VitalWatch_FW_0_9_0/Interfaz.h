@@ -370,31 +370,18 @@ static inline void dibujarMedicacion() {
     return;
   }
 
-  char fechaLegible[11] = "--/--/----";
-  if (strlen(medicamento.fecha) == 10) {
-    snprintf(
-      fechaLegible,
-      sizeof(fechaLegible),
-      "%.2s/%.2s/%.4s",
-      medicamento.fecha + 8,
-      medicamento.fecha + 5,
-      medicamento.fecha
-    );
-  }
-
-  textoCentrado(fechaLegible, 39, 1, VW_GRIS);
-  textoCentrado(medicamento.hora, 50, 2, VW_CIAN);
+  textoCentrado(medicamento.hora, 39, 2, VW_CIAN);
 
   const String nombre = textoMedicacionParaPantalla(medicamento.nombre, 19);
   const String dosis = textoMedicacionParaPantalla(medicamento.dosis, 19);
-  textoCentrado(nombre.c_str(), 71, 1, VW_BLANCO);
-  textoCentrado(dosis.c_str(), 83, 1, VW_CIAN);
+  textoCentrado(nombre.c_str(), 62, 1, VW_BLANCO);
+  textoCentrado(dosis.c_str(), 78, 1, VW_CIAN);
 
   const uint16_t colorEstadoMedicacion = medicamento.tomado ? VW_VERDE : VW_AMARILLO;
-  tft.fillRoundRect(8, 97, 112, 19, 4, colorEstadoMedicacion);
+  tft.fillRoundRect(8, 94, 112, 19, 4, colorEstadoMedicacion);
   textoCentrado(
     medicamento.tomado ? "TOMADO" : "PENDIENTE",
-    103,
+    100,
     1,
     VW_NEGRO,
     colorEstadoMedicacion

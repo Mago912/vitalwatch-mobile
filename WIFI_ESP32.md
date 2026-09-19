@@ -1,6 +1,6 @@
 # Configurar WiFi en la pulsera VitalWatch
 
-El firmware 0.9.0 permite configurar el WiFi desde un celular. Ya no es
+Los firmwares 0.9.0 y 0.9.1 permiten configurar el WiFi desde un celular. Ya no es
 necesario escribir la red y la contrasena en el codigo cada vez que la pulsera
 cambia de casa.
 

@@ -22,7 +22,7 @@ privados:
 | --- | --- |
 | `.env.local` | URL y clave publicable de Supabase |
 | `.env.simulator.local` | Clave secreta usada por el simulador |
-| `esp32/VitalWatch_FW_0_9_0/vitalwatch_config.h` | Supabase y token privado del ESP32 |
+| `esp32/VitalWatch_FW_0_9_1/vitalwatch_config.h` | Supabase y token privado del ESP32 |
 | `supabase/functions/.env.local` | Token privado de Expo |
 | `PAIRING_CODE.local.txt` | Codigo local de vinculacion |
 
@@ -48,7 +48,9 @@ Arduino CLI, el nucleo ESP32 y las librerias requeridas.
 
 ## 3. Descargar el proyecto
 
-Abre PowerShell en la carpeta donde quieras guardar VitalWatch:
+Abre PowerShell en la carpeta donde quieras guardar VitalWatch. Si ya existe
+una copia con muchos cambios locales, conserva esa carpeta como respaldo y usa
+un nombre nuevo para evitar mezclar versiones:
 
 ```powershell
 git clone https://github.com/Mago912/vitalwatch-mobile.git
@@ -134,7 +136,7 @@ npm run firmware:configure
 ```
 
 Tambien puedes colocar directamente la copia privada de
-`vitalwatch_config.h` dentro de `esp32/VitalWatch_FW_0_9_0/`. El WiFi principal
+`vitalwatch_config.h` dentro de `esp32/VitalWatch_FW_0_9_1/`. El WiFi principal
 se carga desde el portal descrito en `WIFI_ESP32.md`.
 
 Compila antes de conectar la placa:
@@ -183,5 +185,6 @@ npm run firmware:upload -- -Port COM3
 | `lib/` | Supabase, notificaciones y medicamentos |
 | `supabase/` | Migraciones y Edge Functions |
 | `esp32/VitalWatch_FW_0_5_0/` | Firmware original conservado |
-| `esp32/VitalWatch_FW_0_9_0/` | Firmware actual con portal WiFi y control remoto TFT |
+| `esp32/VitalWatch_FW_0_9_0/` | Firmware estable probado en el ESP32 |
+| `esp32/VitalWatch_FW_0_9_1/` | Candidato actual con control rapido y fecha de medicacion |
 | `scripts/` | Instalacion, compilacion y pruebas |

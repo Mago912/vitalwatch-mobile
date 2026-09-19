@@ -1,8 +1,8 @@
 # VitalWatch: medicamentos y ESP32
 
-## Que hace el firmware 0.9.0
+## Que hace el firmware 0.9.1
 
-La version 0.9.0 conserva la telemetria y configuracion WiFi de 0.8.0, y agrega control de la TFT
+La version 0.9.1 conserva la telemetria y configuracion WiFi de 0.9.0, y mejora el control de la TFT
 desde el celular. Incluye:
 
 - medicion continua con MAX30102;
@@ -19,9 +19,9 @@ recorrer tratamientos y confirmar una toma con una pulsacion larga de OK.
 La carpeta `esp32/VitalWatch_FW_0_5_0` conserva el codigo recibido sin cambios.
 La version 0.6.0 conserva la primera integracion de medicamentos que ya fue
 probada en el ESP32. La telemetria inicial queda en 0.7.0 y la version actual
-esta en `esp32/VitalWatch_FW_0_9_0`.
+esta en `esp32/VitalWatch_FW_0_9_1`.
 
-El firmware 0.9.0 envia cada 30 segundos la frecuencia cardiaca, SpO2 y fuerza
+El firmware 0.9.1 envia cada 30 segundos la frecuencia cardiaca, SpO2 y fuerza
 de aceleracion realmente disponibles en los sensores. Una posible caida se
 envia inmediatamente. Para activar SOS se mantienen presionados izquierda y
 derecha al mismo tiempo durante 2.5 segundos.
@@ -37,15 +37,15 @@ principal cuando hay Internet.
    - `Adafruit GFX Library`.
    - `Adafruit ST7735 and ST7789 Library`.
    - `SparkFun MAX3010x Pulse and Proximity Sensor Library`.
-3. Abre `esp32/VitalWatch_FW_0_9_0/VitalWatch_FW_0_9_0.ino`.
-4. Copia `esp32/VitalWatch_FW_0_9_0/vitalwatch_config.example.h` como
-   `esp32/VitalWatch_FW_0_9_0/vitalwatch_config.h`.
+3. Abre `esp32/VitalWatch_FW_0_9_1/VitalWatch_FW_0_9_1.ino`.
+4. Copia `esp32/VitalWatch_FW_0_9_1/vitalwatch_config.example.h` como
+   `esp32/VitalWatch_FW_0_9_1/vitalwatch_config.h`.
 5. Completa la clave publicable de Supabase y el token privado del ESP32. El
    WiFi se configura despues desde el celular.
 6. Conecta los tres pulsadores indicados en la seccion de cableado.
 7. Carga el programa y abre el Monitor Serie a 115200 baudios.
 
-`esp32/VitalWatch_FW_0_9_0/vitalwatch_config.h` esta ignorado por Git. No
+`esp32/VitalWatch_FW_0_9_1/vitalwatch_config.h` esta ignorado por Git. No
 publiques el token privado.
 
 ## Compilar y cargar desde este proyecto
@@ -85,7 +85,7 @@ USB ademas de `COM1`. Si Windows muestra varios puertos, se puede indicar uno co
 La configuracion de respaldo pide la contrasena sin mostrarla. La carga ya no
 exige WiFi en el codigo: valida Supabase y el token del dispositivo. El binario
 completo generado queda en
-`.arduino/build/vitalwatch-0.9.0/VitalWatch_FW_0_9_0.ino.merged.bin`.
+`.arduino/build/vitalwatch-0.9.1/VitalWatch_FW_0_9_1.ino.merged.bin`.
 
 La prueba TFT no necesita WiFi ni Supabase. Debe mostrar un encabezado azul, tres
 cuadrados rojo, verde y azul, y el texto `OK`. Cuando esa imagen se vea bien, se
@@ -172,7 +172,7 @@ y modificar sus propios datos mediante politicas RLS de Supabase.
 La vinculacion usa un codigo de un solo uso: despues de asociar `VW-001` con una
 cuenta, el codigo se elimina de la base de datos. El ESP32 tiene una credencial
 distinta, guardada solamente en
-`esp32/VitalWatch_FW_0_9_0/vitalwatch_config.h`, para consultar sus
+`esp32/VitalWatch_FW_0_9_1/vitalwatch_config.h`, para consultar sus
 medicamentos y marcar una toma. El repositorio guarda unicamente los hashes
 SHA-256 de esas credenciales.
 

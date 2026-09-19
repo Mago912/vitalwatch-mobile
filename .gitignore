@@ -41,6 +41,19 @@ PAIRING_CODE.local.txt
 /.arduino/
 /.tools/
 /supabase/.temp/
+/.codex-android-preview/
+/.codex-ios-preview/
+/.codex-android-cleanup-preview/
+/.codex-ios-cleanup-preview/
+/measurements/
+/Laboratorio_Pruebas_MAX30102_2026-09-17/RAW/
+/.eas-build-current.log
+/deliverables/
+/docs/rollback/
+/docs/**/*.apk
+/docs/**/*.zip
+**/__pycache__/
+*.py[cod]
 
 # typescript
 *.tsbuildinfo
@@ -50,3 +63,4 @@ app-example
 # generated native folders
 /ios
 /android
+.eas-temp/

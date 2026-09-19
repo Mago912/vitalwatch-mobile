@@ -6,11 +6,14 @@ type DevicePayload = {
   deviceCode: string;
   reportedDisplayOn?: boolean;
   reportedDisplayView?: DisplayView;
+  reportedAlertState?: AlertState;
+  reportedInputHandled?: boolean;
   medicationId?: number;
-  status?: 'taken';
+  status?: 'pending' | 'taken';
 };
 
 type DisplayView = 'menu' | 'vitals' | 'movement' | 'status' | 'medication';
+type AlertState = 'none' | 'fall' | 'sos';
 
 type MedicationRow = {
   dose: string;
@@ -43,7 +46,7 @@ export default {
       const { data: device, error: deviceError } = await context.supabaseAdmin
         .from('devices')
         .select(
-          'id, user_id, device_token_hash, desired_display_on, desired_display_view, display_command_at'
+          'id, user_id, device_token_hash, desired_display_on, desired_display_view, display_command_at, desired_input_action, input_command_at, input_reported_at'
         )
         .eq('device_code', payload.deviceCode.trim())
         .maybeSingle();
@@ -61,7 +64,12 @@ export default {
         return jsonResponse({ error: 'Credencial de pulsera invalida.' }, 401);
       }
 
-      if (payload.reportedDisplayOn !== undefined || payload.reportedDisplayView !== undefined) {
+      if (
+        payload.reportedDisplayOn !== undefined ||
+        payload.reportedDisplayView !== undefined ||
+        payload.reportedAlertState !== undefined ||
+        payload.reportedInputHandled === true
+      ) {
         const displayReport: Record<string, boolean | string> = {
           display_reported_at: new Date().toISOString(),
         };
@@ -70,6 +78,13 @@ export default {
         }
         if (payload.reportedDisplayView !== undefined) {
           displayReport.reported_display_view = payload.reportedDisplayView;
+        }
+        if (payload.reportedAlertState !== undefined) {
+          displayReport.reported_alert_state = payload.reportedAlertState;
+          displayReport.alert_reported_at = new Date().toISOString();
+        }
+        if (payload.reportedInputHandled === true) {
+          displayReport.input_reported_at = new Date().toISOString();
         }
 
         const { error: reportError } = await context.supabaseAdmin
@@ -81,13 +96,25 @@ export default {
       }
 
       if (payload.action === 'set_status') {
-        await markMedicationTaken(context.supabaseAdmin, device, payload.medicationId!);
+        await markMedicationStatus(
+          context.supabaseAdmin,
+          device,
+          payload.medicationId!,
+          payload.status!
+        );
       }
 
+      const inputIsPending =
+        payload.reportedInputHandled !== true &&
+        device.input_command_at !== null &&
+        (device.input_reported_at === null ||
+          new Date(device.input_reported_at).getTime() <
+            new Date(device.input_command_at).getTime());
       const control = {
         commandAt: device.display_command_at,
         displayOn: device.desired_display_on ?? true,
         displayView: device.desired_display_view ?? 'menu',
+        inputAction: inputIsPending ? device.desired_input_action : null,
       };
 
       if (payload.action === 'control') {
@@ -129,31 +156,55 @@ async function listMedications(supabaseAdmin: any, userId: number) {
   if (logsError) throw logsError;
 
   const latestStatus = new Map<number, string>();
+  const scheduledByMedication = new Map(
+    medications.map((medication) => [
+      medication.id,
+      new Date(
+        scheduledDateTimeToIso(medication.scheduled_date, medication.scheduled_time.slice(0, 5))
+      ).getTime(),
+    ])
+  );
 
   for (const log of (logRows ?? []) as MedicationLogRow[]) {
-    if (!latestStatus.has(log.medication_id)) {
+    const expectedSchedule = scheduledByMedication.get(log.medication_id);
+    const loggedSchedule = new Date(log.scheduled_for).getTime();
+    const belongsToCurrentSchedule =
+      expectedSchedule !== undefined && Math.abs(loggedSchedule - expectedSchedule) <= 60_000;
+
+    if (belongsToCurrentSchedule && !latestStatus.has(log.medication_id)) {
       latestStatus.set(log.medication_id, log.status);
     }
   }
 
-  return medications.map((medication) => ({
-    id: String(medication.id),
-    name: medication.name,
-    dose: medication.dose,
-    date: medication.scheduled_date,
-    time: medication.scheduled_time.slice(0, 5),
-    status: latestStatus.get(medication.id) === 'taken' ? 'Tomado' : 'Pendiente',
-  }));
+  const now = Date.now();
+  const reminderWindowMs = 6 * 60 * 60 * 1000;
+
+  return medications.map((medication) => {
+    const scheduledAt = scheduledByMedication.get(medication.id) ?? Number.NaN;
+    const taken = latestStatus.get(medication.id) === 'taken';
+
+    return {
+      id: String(medication.id),
+      name: medication.name,
+      dose: medication.dose,
+      date: medication.scheduled_date,
+      time: medication.scheduled_time.slice(0, 5),
+      status: taken ? 'Tomado' : 'Pendiente',
+      reminderDue:
+        !taken && Number.isFinite(scheduledAt) && now >= scheduledAt && now < scheduledAt + reminderWindowMs,
+    };
+  });
 }
 
-async function markMedicationTaken(
+async function markMedicationStatus(
   supabaseAdmin: any,
   device: { id: number; user_id: number },
-  medicationId: number
+  medicationId: number,
+  status: 'pending' | 'taken'
 ) {
   const { data: medication, error: medicationError } = await supabaseAdmin
     .from('medications')
-    .select('id, name')
+    .select('id, name, scheduled_date, scheduled_time')
     .eq('id', medicationId)
     .eq('user_id', device.user_id)
     .eq('active', true)
@@ -163,16 +214,22 @@ async function markMedicationTaken(
   if (!medication) throw new Error('Medicamento no encontrado.');
 
   const now = new Date().toISOString();
+  const scheduledFor = scheduledDateTimeToIso(
+    medication.scheduled_date,
+    medication.scheduled_time.slice(0, 5)
+  );
   const { error: logError } = await supabaseAdmin.from('medication_logs').insert({
     medication_id: medication.id,
     device_id: device.id,
-    scheduled_for: now,
-    taken_at: now,
-    status: 'taken',
+    scheduled_for: scheduledFor,
+    taken_at: status === 'taken' ? now : null,
+    status,
     source: 'esp32',
   });
 
   if (logError) throw logError;
+
+  if (status !== 'taken') return;
 
   const { error: eventError } = await supabaseAdmin.from('device_events').insert({
     device_id: device.id,
@@ -194,16 +251,27 @@ function isDevicePayload(payload: unknown): payload is DevicePayload {
     value.deviceCode.length <= 100 &&
     (value.reportedDisplayOn === undefined ||
       typeof value.reportedDisplayOn === 'boolean') &&
-    (value.reportedDisplayView === undefined || isDisplayView(value.reportedDisplayView));
+    (value.reportedDisplayView === undefined || isDisplayView(value.reportedDisplayView)) &&
+    (value.reportedAlertState === undefined || isAlertState(value.reportedAlertState)) &&
+    (value.reportedInputHandled === undefined ||
+      typeof value.reportedInputHandled === 'boolean');
 
   if (!baseIsValid) return false;
   if (value.action === 'control' || value.action === 'list') return true;
 
   return (
     value.action === 'set_status' &&
-    value.status === 'taken' &&
+    (value.status === 'pending' || value.status === 'taken') &&
     Number.isInteger(value.medicationId)
   );
+}
+
+function scheduledDateTimeToIso(date: string, time: string) {
+  return new Date(`${date}T${time}:00-03:00`).toISOString();
+}
+
+function isAlertState(value: unknown): value is AlertState {
+  return value === 'none' || value === 'fall' || value === 'sos';
 }
 
 function isDisplayView(value: unknown): value is DisplayView {

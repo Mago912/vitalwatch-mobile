@@ -173,9 +173,22 @@ async function listMedications(device: DeviceRow): Promise<Medication[]> {
   }
 
   const latestStatus = new Map<number, string>();
+  const scheduledByMedication = new Map(
+    medications.map((medication) => [
+      medication.id,
+      new Date(
+        scheduledDateTimeToIso(medication.scheduled_date, medication.scheduled_time.slice(0, 5))
+      ).getTime(),
+    ])
+  );
 
   for (const log of (logRows ?? []) as MedicationLogRow[]) {
-    if (!latestStatus.has(log.medication_id)) {
+    const expectedSchedule = scheduledByMedication.get(log.medication_id);
+    const loggedSchedule = new Date(log.scheduled_for).getTime();
+    const belongsToCurrentSchedule =
+      expectedSchedule !== undefined && Math.abs(loggedSchedule - expectedSchedule) <= 60_000;
+
+    if (belongsToCurrentSchedule && !latestStatus.has(log.medication_id)) {
       latestStatus.set(log.medication_id, log.status);
     }
   }

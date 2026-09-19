@@ -1,0 +1,16 @@
+CODEX REPRODUCTION TESTS
+Fecha local: 2026-09-18
+Comando: python -m unittest discover -s tests -v
+Resultado: PASS
+Pruebas ejecutadas: 22
+Errores: 0
+Fallos: 0
+
+Incluye reproducción independiente de IRR-001 a IRR-006 y pruebas del contrato
+corregido: FIFO orden/lleno/overflow, short read, secuencia, timestamp, rollover,
+logger drop, parser RAW/FULL, líneas corruptas, CSV y resumen de sesión. Añade
+OVF 1→0 sin rollover, punteros iguales sin muestras fantasma, cuarentena FIFO
+de arranque y OVF crudo físicamente imposible sin pérdida afirmada.
+
+Estos NO son COWORK ORIGINAL TESTS.
+FINAL_BIOMED_CANDIDATE: NOT_AVAILABLE.

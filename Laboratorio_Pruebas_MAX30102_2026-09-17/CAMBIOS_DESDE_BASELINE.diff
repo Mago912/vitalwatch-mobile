@@ -1,0 +1,1694 @@
+diff --git a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/Configuracion.h b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/Configuracion.h
+index e718d9b..665200d 100644
+--- a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/Configuracion.h
++++ b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/Configuracion.h
+@@ -30,6 +30,9 @@ namespace VitalWatchConfig {
+   static constexpr const char* VERSION_BIOMEDICA = "0.6.3";
+   static constexpr const char* VERSION_FIRMWARE = VERSION_PRODUCTO;
+   static constexpr const char* ROL_BUILD = "CONNECTED_BIOMEDICAL_SYSTEM";
++  static constexpr const char* LAB_ID = "Laboratorio_Pruebas_MAX30102_2026-09-17";
++  static constexpr const char* BASELINE_SHA256 = "CEF0BE067CA84EE40EB9A0A3AA3457B9B62F73E07B266F283E6675FCBDBE3186";
++  static constexpr uint32_t LAB_SERIAL_BAUD = 460800UL;
+   static constexpr uint16_t ALGORITHM_VERSION_HR = 0x0603;
+   static constexpr uint16_t ALGORITHM_VERSION_SPO2 = 0x0603;
+   static constexpr uint16_t CALIBRATION_VERSION_SPO2 = 0x0001;
+@@ -100,7 +103,7 @@ namespace VitalWatchConfig {
+ 
+   // [BIOSYS-A3] Instrumentacion BIO opcional. El producto normal la desactiva.
+   #ifndef BIO_RESEARCH_MODE
+-    #define BIO_RESEARCH_MODE 0
++    #define BIO_RESEARCH_MODE 1
+   #endif
+   #ifndef BIO_REPLAY_MODE
+     #define BIO_REPLAY_MODE 0
+diff --git a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/Sensor_Oxigeno.h b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/Sensor_Oxigeno.h
+index 39b84ab..d63650f 100644
+--- a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/Sensor_Oxigeno.h
++++ b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/Sensor_Oxigeno.h
+@@ -61,6 +61,10 @@ enum PeakSource : uint8_t {
+   PEAK_ACCEPTED=1u<<2
+ };
+ 
++enum class PPGTimestampSource : uint8_t {
++  ESTIMATED_PERIODIC = 0
++};
++
+ struct HeartRateResult {
+   float bpm;
+   HeartRateStatus status;
+@@ -85,6 +89,9 @@ struct PPGSample {
+   uint32_t ir;
+   uint32_t sequence;
+   uint64_t sampleTimeUs;
++  uint64_t serviceTimeUs;
++  PPGTimestampSource timestampSource;
++  bool readValid;
+   bool timingValid;
+ };
+ 
+@@ -93,6 +100,10 @@ struct PPGDiagnostics {
+   uint32_t samplesProcessed;
+   uint32_t checkSamplesTotal;
+   uint32_t suspectedSoftwareDrops;
++  uint32_t hardwareOverflowTotal;
++  uint32_t softwareOverflowTotal;
++  uint32_t shortReadTotal;
++  uint32_t sequenceGapTotal;
+   uint32_t timingInvalidSamples;
+   uint32_t maxServiceGapUs;
+   uint16_t lastCheckCount;
+@@ -100,6 +111,8 @@ struct PPGDiagnostics {
+   uint8_t hwReadPointer;
+   uint8_t hwWritePointer;
+   uint8_t hwOverflowCounter;
++  uint8_t lastReadStatus;
++  uint8_t maxFifoBacklog;
+   uint8_t ledAmplitude;
+   uint8_t partId;
+   bool contact;
+diff --git a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/Sensor_Oxigeno.cpp b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/Sensor_Oxigeno.cpp
+index 2fc32d4..aa64358 100644
+--- a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/Sensor_Oxigeno.cpp
++++ b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/Sensor_Oxigeno.cpp
+@@ -8,6 +8,7 @@
+ #include "I2CBusService.h"
+ #include "SystemState.h"
+ #include "BioResearch.h"
++#include "MonotonicMicros.h"
+ 
+ namespace PPGConfig {
+ // [BIOSYS-H1] Adquisición estable para el MAX30102 y ventanas PPG.
+@@ -23,6 +24,7 @@ constexpr uint8_t FIFO_AVG=4, LED_MODE=2;
+ constexpr uint16_t SENSOR_RATE=100, PULSE_WIDTH_US=411, ADC_RANGE=4096;
+ constexpr uint32_t EFFECTIVE_RATE_HZ=25; // 100 / AVG4
+ constexpr uint32_t SAMPLE_PERIOD_US=1000000UL/EFFECTIVE_RATE_HZ;
++constexpr uint8_t HARDWARE_FIFO_CAPACITY=32;
+ 
+ constexpr uint32_t CONTACT_THRESHOLD=14000UL, REMOVE_THRESHOLD=8500UL, AUTOGAIN_START=7000UL;
+ constexpr uint32_t IR_TARGET_MIN=38000UL, IR_TARGET_MAX=90000UL;
+@@ -58,14 +60,20 @@ uint64_t lastQueuedBpmUs=0;
+ uint32_t lastDisplayPublishMs=0;
+ MeasurementSessionState session=MeasurementSessionState::WAITING_CONTACT;
+ PPGDiagnostics diag={};
+-PPGSample latest={0,0,0,0,false};
++PPGSample latest={0,0,0,0,0,PPGTimestampSource::ESTIMATED_PERIODIC,false,false};
+ 
+ uint32_t sequence=0;
+ uint32_t sessionCounter=0;
+ uint16_t missingSamplesRemaining=0;
+ uint64_t lastServiceUs=0;
++uint64_t lastEstimatedSampleUs=0;
++uint32_t lastTimestampSequence=0;
++uint32_t lastSoftwareOverflow=0;
++uint32_t lastShortRead=0;
++uint32_t lastHardwareOverflowTotal=0;
+ uint64_t contactCandidateUs=0, noContactCandidateUs=0;
+ bool contact=false, stabilizing=false;
++bool alignFifoOnFirstService=true;
+ uint32_t stabilizingStartedMs=0, measuringStartedMs=0, lastAutogainMs=0;
+ uint32_t irSmooth=0;
+ 
+@@ -386,7 +394,12 @@ bool connectSensor(){
+   led=PPGConfig::LED_INITIAL;
+   sensor.setup(led,PPGConfig::FIFO_AVG,PPGConfig::LED_MODE,PPGConfig::SENSOR_RATE,PPGConfig::PULSE_WIDTH_US,PPGConfig::ADC_RANGE);
+   setLed(led);sensor.setPulseAmplitudeGreen(0);sensor.clearFIFO();I2CBusService::restoreConfig();
+-  sequence=0;lastServiceUs=0;contact=false;diag.contact=false;contactCandidateUs=noContactCandidateUs=0;irSmooth=0;lastAutogainMs=0;resetAlgorithms(false);resetDisplayResults();session=MeasurementSessionState::WAITING_CONTACT;
++  sequence=0;lastServiceUs=0;lastEstimatedSampleUs=0;lastTimestampSequence=0;
++  lastSoftwareOverflow=0;lastShortRead=0;lastHardwareOverflowTotal=0;
++  diag.hardwareOverflowTotal=0;diag.softwareOverflowTotal=0;
++  diag.shortReadTotal=0;diag.sequenceGapTotal=0;diag.suspectedSoftwareDrops=0;
++  alignFifoOnFirstService=true;
++  contact=false;diag.contact=false;contactCandidateUs=noContactCandidateUs=0;irSmooth=0;lastAutogainMs=0;resetAlgorithms(false);resetDisplayResults();session=MeasurementSessionState::WAITING_CONTACT;
+   Serial.printf("[INFO][PPG] MAX30102 PART_ID=0x%02X %uHz/AVG%u => ~%lu FIFO records/s\n",diag.partId,(unsigned)PPGConfig::SENSOR_RATE,(unsigned)PPGConfig::FIFO_AVG,(unsigned long)PPGConfig::EFFECTIVE_RATE_HZ);
+   return true;
+ }
+@@ -414,45 +427,91 @@ void update(){
+   return;
+ #endif
+   if(!systemHealth.ppgReady)return;
+-  const uint64_t nowUs=(uint64_t)micros();
++  // El sensor comienza a convertir durante setup(), antes de que Wi-Fi y los
++  // demás servicios terminen de inicializar. Alinear aquí una sola vez evita
++  // comenzar el loop con 32 muestras antiguas y el FIFO ya desbordado.
++  if(alignFifoOnFirstService){
++    sensor.clearFIFO();
++    alignFifoOnFirstService=false;
++    lastSoftwareOverflow=lastShortRead=lastHardwareOverflowTotal=0;
++    Serial.println(F("[INFO][PPG] FIFO alineado al iniciar servicio cooperativo"));
++    return;
++  }
++  const uint64_t nowUs=MonotonicMicros::now();
+   if(lastServiceUs){const uint32_t gap=(uint32_t)(nowUs-lastServiceUs);runtimeMetrics.ppgServiceGapUs=gap;if(gap>runtimeMetrics.ppgServiceGapMaxUs)runtimeMetrics.ppgServiceGapMaxUs=gap;if(gap>diag.maxServiceGapUs)diag.maxServiceGapUs=gap;}
+   lastServiceUs=nowUs;
+ 
+-  const uint16_t found=sensor.check();diag.lastCheckCount=found;diag.checkSamplesTotal+=found;
++  const uint16_t acquired=sensor.check();
++  const uint16_t found=sensor.getLastCheckFound();
++  diag.lastCheckCount=found;diag.checkSamplesTotal+=found;
+   const uint8_t available=sensor.available();diag.lastAvailable=available;
+-  diag.hwReadPointer=sensor.getReadPointer();diag.hwWritePointer=sensor.getWritePointer();
+-  // Registro FIFO_OVF_COUNTER = 0x05 (MAX30102). Lectura de research/diagnostico.
+-  diag.hwOverflowCounter=sensor.readRegister8(PPGConfig::ADDRESS,0x05);
+-
+-  // SparkFun estándar tiene STORAGE_SIZE=4. Si check() incorporó mas muestras
+-  // que las que quedan disponibles, tratamos la diferencia como pérdida software
+-  // sospechada y NO fingimos timing perfecto.
+-  if(found>available){
+-    const uint32_t lost=found-available;diag.suspectedSoftwareDrops+=lost;sequence+=lost;
++  if(available>diag.maxFifoBacklog)diag.maxFifoBacklog=available;
++  diag.hwReadPointer=sensor.getLastReadPointer();diag.hwWritePointer=sensor.getLastWritePointer();
++  diag.hwOverflowCounter=sensor.getLastHardwareOverflow();
++  diag.lastReadStatus=(uint8_t)sensor.getLastReadStatus();
++
++  const uint32_t softwareNow=sensor.getSoftwareOverflowCount();
++  const uint32_t shortNow=sensor.getShortReadCount();
++  const uint32_t softwareDelta=softwareNow-lastSoftwareOverflow;
++  const uint32_t shortDelta=shortNow-lastShortRead;
++  lastSoftwareOverflow=softwareNow;lastShortRead=shortNow;
++  diag.softwareOverflowTotal+=softwareDelta;
++  diag.shortReadTotal+=shortDelta;
++  diag.suspectedSoftwareDrops=diag.softwareOverflowTotal;
++
++  const uint32_t hardwareNow=sensor.getHardwareOverflowCount();
++  const uint32_t hardwareObservedDelta=hardwareNow-lastHardwareOverflowTotal;
++  lastHardwareOverflowTotal=hardwareNow;
++  // En el módulo físico probado OVF_COUNTER devuelve 1 por muestra aun con
++  // backlog 1 y servicio a 25 Hz. Se conserva el byte RAW, pero solo se afirma
++  // pérdida si existe capacidad temporal o backlog compatibles con FIFO lleno.
++  const bool hardwareOverflowCorroborated=hardwareObservedDelta>0 &&
++    (found>=PPGConfig::HARDWARE_FIFO_CAPACITY-1 ||
++     runtimeMetrics.ppgServiceGapUs>=
++       PPGConfig::SAMPLE_PERIOD_US*PPGConfig::HARDWARE_FIFO_CAPACITY);
++  const uint32_t hardwareDelta=hardwareOverflowCorroborated?hardwareObservedDelta:0;
++  diag.hardwareOverflowTotal+=hardwareDelta;
++
++  const uint32_t shortLost=found>acquired?(uint32_t)(found-acquired):0;
++  const uint32_t lost=hardwareDelta+softwareDelta+shortLost;
++  if(lost){
++    diag.sequenceGapTotal+=lost;sequence+=lost;
+     // La invalidez dura una ventana optica completa y despues se recupera. En
+     // la entrega original este flag quedaba activo para siempre hasta retirar
+     // el dedo, aun cuando ya no quedaban muestras afectadas en el buffer.
+     missingSamplesRemaining=PPGConfig::SPO2_N*PPGConfig::SPO2_DECIMATION;
+     diag.missingSamplesInWindow=true;
++    BioResearch::logLossEvent(hardwareDelta,softwareDelta,shortLost,sequence);
+   }
+ 
+   const uint8_t n=min((uint8_t)PPGConfig::MAX_VISIBLE_SAMPLES_PER_UPDATE,available);
+-  const uint64_t newestApproxUs=(uint64_t)micros();
+-  const uint64_t firstApproxUs=(n>0)?newestApproxUs-(uint64_t)(n-1)*PPGConfig::SAMPLE_PERIOD_US:newestApproxUs;
+   for(uint8_t i=0;i<n&&sensor.available();++i){
+     PPGSample s;
+     s.red=sensor.getFIFORed();s.ir=sensor.getFIFOIR();sensor.nextSample();
+-    s.sequence=++sequence;s.sampleTimeUs=firstApproxUs+(uint64_t)i*PPGConfig::SAMPLE_PERIOD_US;
++    s.sequence=++sequence;
++    if(lastEstimatedSampleUs==0){
++      s.sampleTimeUs=nowUs-(uint64_t)(n-1-i)*PPGConfig::SAMPLE_PERIOD_US;
++    }else{
++      const uint32_t sequenceDelta=s.sequence-lastTimestampSequence;
++      s.sampleTimeUs=lastEstimatedSampleUs+(uint64_t)sequenceDelta*PPGConfig::SAMPLE_PERIOD_US;
++    }
++    lastEstimatedSampleUs=s.sampleTimeUs;lastTimestampSequence=s.sequence;
++    s.serviceTimeUs=nowUs;
++    s.timestampSource=PPGTimestampSource::ESTIMATED_PERIODIC;
++    s.readValid=true;
+     // Se usa el gap ACTUAL para validar esta tanda; el maximo historico queda
+     // solo como diagnostico. Asi una pausa aislada no invalida toda la sesion.
+-    s.timingValid=!diag.missingSamplesInWindow &&
++    s.timingValid=!diag.missingSamplesInWindow && shortDelta==0 &&
+       (runtimeMetrics.ppgServiceGapUs < PPGConfig::SAMPLE_PERIOD_US*4UL);
+     processSample(s);
+   }
+ }
+ 
+ void resetReplay(){
+-  contact=false;diag.contact=false;contactCandidateUs=noContactCandidateUs=0;sequence=0;lastServiceUs=0;irSmooth=0;lastAutogainMs=0;resetAlgorithms(false);resetDisplayResults();session=MeasurementSessionState::WAITING_CONTACT;
++  contact=false;diag.contact=false;contactCandidateUs=noContactCandidateUs=0;sequence=0;lastServiceUs=0;
++  lastEstimatedSampleUs=0;lastTimestampSequence=0;lastSoftwareOverflow=0;lastShortRead=0;lastHardwareOverflowTotal=0;
++  alignFifoOnFirstService=true;
++  irSmooth=0;lastAutogainMs=0;resetAlgorithms(false);resetDisplayResults();session=MeasurementSessionState::WAITING_CONTACT;
+ }
+ void processReplaySample(const PPGSample&s){processSample(s);}
+ }
+diff --git a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/BioResearch.h b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/BioResearch.h
+index 253b568..3595e66 100644
+--- a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/BioResearch.h
++++ b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/BioResearch.h
+@@ -10,14 +10,20 @@
+   BIO_RESEARCH_MODE=0 elimina casi todo el costo de ejecucion normal.
+ */
+ namespace BioResearch {
++  enum class LogMode : uint8_t { OFF=0, RAW=1, FULL=2 };
+   void begin();
+   void update();
++  bool handleSerialLine(char *line);
+   void logPPG(const PPGSample &s, float irDc, float irAc, float irFiltered,
+               uint8_t peakBits, uint16_t ibiMs, float bpmInstant,
+               const HeartRateResult &hr, const SpO2Result &spo2,
+               const PPGDiagnostics &diag, MeasurementSessionState session,
+               uint32_t processingTimeUs);
++  void logLossEvent(uint32_t hardwareOverflow, uint32_t softwareOverflow,
++                    uint32_t shortReadLost, uint32_t sequenceAfterGap);
+   uint32_t droppedRecords();
++  LogMode mode();
++  bool sessionActive();
+ }
+ 
+ #endif
+diff --git a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/BioResearch.cpp b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/BioResearch.cpp
+index 8e3b761..5d216b7 100644
+--- a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/BioResearch.cpp
++++ b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/BioResearch.cpp
+@@ -1,12 +1,14 @@
+ #include "BioResearch.h"
+ #include "Configuracion.h"
+ #include "SystemState.h"
++#include "MonotonicMicros.h"
++#include <ctype.h>
++#include <stdlib.h>
++#include <string.h>
+ 
+-/* SOURCE: Biomedical Algorithms Lab, contrato AUTH-019. */
+-
++/* CODEX LAB LOGGER: observabilidad; no modifica el algoritmo biomédico. */
+ #if BIO_RESEARCH_MODE
+ namespace {
+-// [BIOSYS-I1] Registro de laboratorio acotado y cola fija, sin memoria dinámica.
+ struct Record {
+   PPGSample ppg;
+   float irDc,irAc,irFiltered;
+@@ -16,85 +18,245 @@ struct Record {
+   HeartRateResult hr;
+   SpO2Result spo2;
+   PPGDiagnostics ppgDiag;
+-  MeasurementSessionState session;
++  MeasurementSessionState measurementSession;
+   MotionSample motion;
+   MotionDiagnostics motionDiag;
+   uint32_t processingUs,loopLastUs,loopMaxUs,displayRenderUs,i2cFailures;
+ };
+ 
+-constexpr uint8_t QUEUE_SIZE=8;
++constexpr uint8_t QUEUE_SIZE=12;
+ Record queue[QUEUE_SIZE];
+ uint8_t head=0,tail=0,count=0;
+-uint32_t dropped=0;
+-char tx[768];
++uint32_t dropped=0,sessionId=0,sessionSamples=0;
++BioResearch::LogMode currentMode=BioResearch::LogMode::OFF;
++bool active=false;
++char testId[32]="UNSET",subjectId[32]="UNSET";
++char tx[1024];
+ size_t txLen=0,txPos=0;
+ 
++struct PendingLoss {
++  uint32_t hardware,software,shortRead,sequence;
++  bool pending;
++} pendingLoss={0,0,0,0,false};
++
++const char* modeName(BioResearch::LogMode value){
++  switch(value){case BioResearch::LogMode::RAW:return "RAW";case BioResearch::LogMode::FULL:return "FULL";default:return "OFF";}
++}
++
++bool safeToken(const char *value){
++  if(!value||!*value)return false;
++  for(size_t i=0;value[i];++i){
++    const char c=value[i];
++    if(!(isalnum((unsigned char)c)||c=='_'||c=='-'||c=='.'))return false;
++    if(i>=30)return false;
++  }
++  return true;
++}
++
+ bool enqueue(const Record &record){
+   if(count>=QUEUE_SIZE){++dropped;return false;}
+   queue[head]=record;head=(head+1)%QUEUE_SIZE;++count;return true;
+ }
+ 
+-void buildLine(){
+-  // [BIOSYS-I2] Serialización CSV diferida para no bloquear la adquisición.
++void emitMetadata(){
++  Serial.println(F("@VW_META,schema_version,1"));
++  Serial.printf("@VW_META,lab_id,%s\n",VitalWatchConfig::LAB_ID);
++  Serial.printf("@VW_META,baseline_sha256,%s\n",VitalWatchConfig::BASELINE_SHA256);
++  Serial.printf("@VW_META,firmware_product,%s\n",VitalWatchConfig::VERSION_PRODUCTO);
++  Serial.printf("@VW_META,firmware_sys,%s\n",VitalWatchConfig::VERSION_SISTEMA);
++  Serial.printf("@VW_META,firmware_bio,%s\n",VitalWatchConfig::VERSION_BIOMEDICA);
++  Serial.printf("@VW_META,serial_baud,%lu\n",(unsigned long)VitalWatchConfig::LAB_SERIAL_BAUD);
++  Serial.println(F("@VW_META,sensor,MAX30102"));
++  Serial.println(F("@VW_META,driver,SparkFun_MAX3010x_Lab_1.1.2-derived"));
++  Serial.println(F("@VW_META,timestamp_source,ESTIMATED_PERIODIC"));
++  Serial.println(F("@VW_META,sensor_rate_hz,100"));
++  Serial.println(F("@VW_META,fifo_average,4"));
++  Serial.println(F("@VW_META,effective_rate_hz,25"));
++  Serial.println(F("@VW_META,sample_period_us,40000"));
++  Serial.printf("@VW_META,i2c_sda,%u\n",(unsigned)VitalWatchConfig::PIN_I2C_SDA);
++  Serial.printf("@VW_META,i2c_scl,%u\n",(unsigned)VitalWatchConfig::PIN_I2C_SCL);
++  Serial.printf("@VW_META,i2c_hz,%lu\n",(unsigned long)VitalWatchConfig::FRECUENCIA_I2C_HZ);
++  Serial.printf("@VW_META,test_id,%s\n",testId);
++  Serial.printf("@VW_META,subject_id,%s\n",subjectId);
++  Serial.printf("@VW_META,log_mode,%s\n",modeName(currentMode));
++  Serial.println(F("@VW_META,clinical_use,NO"));
++}
++
++void emitStatus(){
++  const PPGDiagnostics &p=PPGService::diagnostics();
++  Serial.printf("@VW_STAT,%lu,%llu,%s,%u,%u,%lu,%lu,%lu,%lu,%lu,%lu,%u\n",
++    (unsigned long)sessionId,(unsigned long long)MonotonicMicros::now(),modeName(currentMode),
++    active?1u:0u,(unsigned)count,(unsigned long)dropped,(unsigned long)sessionSamples,
++    (unsigned long)p.hardwareOverflowTotal,(unsigned long)p.softwareOverflowTotal,
++    (unsigned long)p.shortReadTotal,(unsigned long)p.sequenceGapTotal,(unsigned)p.maxFifoBacklog);
++}
++
++void buildLossLine(){
++  if(!pendingLoss.pending||txPos<txLen)return;
++  txLen=(size_t)snprintf(tx,sizeof(tx),
++    "@VW_EVT,%lu,%llu,ACQUISITION_LOSS,%lu,%lu,%lu,sequence_after_%lu\n",
++    (unsigned long)sessionId,(unsigned long long)MonotonicMicros::now(),
++    (unsigned long)pendingLoss.hardware,(unsigned long)pendingLoss.software,
++    (unsigned long)pendingLoss.shortRead,(unsigned long)pendingLoss.sequence);
++  if(txLen>=sizeof(tx))txLen=sizeof(tx)-1;
++  txPos=0;pendingLoss={0,0,0,0,false};
++}
++
++void buildSampleLine(){
+   if(count==0||txPos<txLen)return;
+   const Record&r=queue[tail];tail=(tail+1)%QUEUE_SIZE;--count;
++  const char *source=r.ppg.timestampSource==PPGTimestampSource::ESTIMATED_PERIODIC?"ESTIMATED_PERIODIC":"UNKNOWN";
+   const float axG=r.motion.axMs2/9.80665f,ayG=r.motion.ayMs2/9.80665f,azG=r.motion.azMs2/9.80665f;
+-  const bool mpuSaturated=r.motion.accelSaturated||r.motion.gyroSaturated;
++  const bool saturated=r.motion.accelSaturated||r.motion.gyroSaturated;
+   txLen=(size_t)snprintf(tx,sizeof(tx),
+-    "PPG,%lu,%lu,%llu,%lu,%lu,%lu,%.3f,%.3f,%.3f,%u,%u,%u,%u,%.2f,%.2f,%u,%u,%u,%.2f,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%llu,%.5f,%.5f,%.5f,%.5f,%.5f,%lu,%u,%lu,%ld,%d,%.3f,%u,%lu,%lu,%lu,%lu\n",
+-    (unsigned long)r.ppgDiag.sessionId,(unsigned long)r.ppg.sequence,
+-    (unsigned long long)r.ppg.sampleTimeUs,(unsigned long)r.processingUs,
+-    (unsigned long)r.ppg.red,(unsigned long)r.ppg.ir,r.irDc,r.irAc,r.irFiltered,
+-    (r.peaks&PEAK_CUSTOM)?1:0,(r.peaks&PEAK_SPARKFUN)?1:0,(r.peaks&PEAK_ACCEPTED)?1:0,
+-    (unsigned)r.ibiMs,r.bpmInstant,r.hr.bpm,(unsigned)r.hr.status,
+-    (unsigned)r.hr.quality,(unsigned)r.hr.qualityReasons,r.spo2.spo2Estimate,
+-    (unsigned)r.spo2.status,(unsigned)r.spo2.quality,(unsigned)r.ppgDiag.ledAmplitude,
++    "@VW_RAW,1,%lu,%lu,%llu,%llu,%s,%u,%u,%lu,%lu,%u,%u,%u,%lu,%lu,%lu,%lu,%lu,%u,%llu,%.6f,%.6f,%.6f,%.6f,%.6f,%lu,%u",
++    (unsigned long)sessionId,(unsigned long)r.ppg.sequence,
++    (unsigned long long)r.ppg.sampleTimeUs,(unsigned long long)r.ppg.serviceTimeUs,source,
++    r.ppg.readValid?1u:0u,r.ppg.timingValid?1u:0u,
++    (unsigned long)r.ppg.red,(unsigned long)r.ppg.ir,
+     (unsigned)r.ppgDiag.lastCheckCount,(unsigned)r.ppgDiag.lastAvailable,
+-    (unsigned)r.ppgDiag.hwReadPointer,(unsigned)r.ppgDiag.hwWritePointer,
+-    (unsigned)r.ppgDiag.hwOverflowCounter,(unsigned)r.ppgDiag.suspectedSoftwareDrops,
+-    r.ppgDiag.missingSamplesInWindow?1:0,(unsigned long long)r.motion.timestampUs,
++    (unsigned)r.ppgDiag.hwOverflowCounter,(unsigned long)r.ppgDiag.hardwareOverflowTotal,
++    (unsigned long)r.ppgDiag.softwareOverflowTotal,(unsigned long)r.ppgDiag.shortReadTotal,
++    (unsigned long)r.ppgDiag.sequenceGapTotal,(unsigned long)dropped,
++    r.motion.valid?1u:0u,(unsigned long long)r.motion.timestampUs,
+     axG,ayG,azG,r.motion.accelerationMagnitudeG,r.motion.gyroMagnitudeRadS,
+-    (unsigned long)r.motion.dtUs,mpuSaturated?1:0,
+-    (unsigned long)r.motionDiag.missedDeadlines,(long)r.ppgDiag.maximSpo2,
+-    (int)r.ppgDiag.maximSpo2Valid,r.ppgDiag.researchSpo2Candidate,
+-    (unsigned)r.session,(unsigned long)r.loopLastUs,(unsigned long)r.loopMaxUs,
+-    (unsigned long)r.displayRenderUs,(unsigned long)r.i2cFailures);
+-  if(txLen>=sizeof(tx))txLen=sizeof(tx)-1;txPos=0;
++    (unsigned long)r.motion.dtUs,saturated?1u:0u);
++  if(currentMode==BioResearch::LogMode::FULL && txLen<sizeof(tx)){
++    const size_t used=txLen;
++    const int added=snprintf(tx+used,sizeof(tx)-used,
++      ",%.3f,%.3f,%.3f,%u,%u,%.3f,%.3f,%u,%u,%u,%.3f,%u,%u,%u,%ld,%d,%.3f,%u,%lu,%lu,%lu,%lu,%lu",
++      r.irDc,r.irAc,r.irFiltered,(unsigned)r.peaks,(unsigned)r.ibiMs,
++      r.bpmInstant,r.hr.bpm,(unsigned)r.hr.status,(unsigned)r.hr.quality,
++      (unsigned)r.hr.qualityReasons,r.spo2.spo2Estimate,(unsigned)r.spo2.status,
++      (unsigned)r.spo2.quality,(unsigned)r.ppgDiag.ledAmplitude,
++      (long)r.ppgDiag.maximSpo2,(int)r.ppgDiag.maximSpo2Valid,
++      r.ppgDiag.researchSpo2Candidate,(unsigned)r.measurementSession,
++      (unsigned long)r.processingUs,(unsigned long)r.loopLastUs,
++      (unsigned long)r.loopMaxUs,(unsigned long)r.displayRenderUs,
++      (unsigned long)r.i2cFailures);
++    if(added>0)txLen=used+(size_t)added;
++  }
++  if(txLen>=sizeof(tx)-2)txLen=sizeof(tx)-2;
++  tx[txLen++]='\n';tx[txLen]='\0';txPos=0;
++}
++
++void finishPendingLine(){
++  if(txPos<txLen)Serial.write((const uint8_t*)tx+txPos,txLen-txPos);
++  txPos=txLen=0;
++  Serial.flush();
++}
++
++void flushSessionQueue(){
++  finishPendingLine();
++  while(pendingLoss.pending||count){
++    buildLossLine();buildSampleLine();
++    finishPendingLine();
++  }
+ }
+ }
+ #endif
+ 
+ namespace BioResearch {
+-// [BIOSYS-I3] API compilable a costo casi nulo cuando BIO_RESEARCH_MODE=0.
+ void begin(){
+ #if BIO_RESEARCH_MODE
+-  Serial.println(F("type,session_id,sample_index,sample_time_us,processing_time_us,red_raw,ir_raw,ir_dc,ir_ac,ir_filtered,peak_custom,peak_sparkfun,peak_accepted,ibi_ms,bpm_instant,bpm_robust,hr_status,ppg_quality,ppg_quality_flags,spo2_result,spo2_status,spo2_quality,led_amplitude,sparkfun_check_count,sparkfun_available,hw_fifo_read_ptr,hw_fifo_write_ptr,hw_fifo_overflow,suspected_drops,missing_samples,mpu_time_us,ax_g,ay_g,az_g,acc_mag_g,gyro_mag_rad_s,mpu_dt_us,mpu_saturated,mpu_missed_deadlines,spo2_maxim,spo2_maxim_valid,spo2_custom_candidate,measurement_state,loop_last_us,loop_max_us,display_render_us,i2c_failures"));
++  Serial.printf("[INFO][BIO-LAB] listo; modo=%s; use BIO HELP\n",modeName(currentMode));
+ #endif
+ }
+ 
+ void logPPG(const PPGSample&s,float dc,float ac,float filtered,uint8_t peaks,
+             uint16_t ibi,float bpmInstant,const HeartRateResult&hr,
+             const SpO2Result&spo2,const PPGDiagnostics&diag,
+-            MeasurementSessionState session,uint32_t processingUs){
++            MeasurementSessionState measurementSession,uint32_t processingUs){
+ #if BIO_RESEARCH_MODE
+-  Record record={s,dc,ac,filtered,peaks,ibi,bpmInstant,hr,spo2,diag,session,
++  if(!active||currentMode==LogMode::OFF)return;
++  Record record={s,dc,ac,filtered,peaks,ibi,bpmInstant,hr,spo2,diag,measurementSession,
+     MotionService::latest(),MotionService::diagnostics(),processingUs,
+     runtimeMetrics.loopLastUs,runtimeMetrics.loopMaxUs,
+     runtimeMetrics.displayRenderLastUs,systemHealth.i2cErrors};
+-  enqueue(record);
++  if(enqueue(record))++sessionSamples;
+ #else
+   (void)s;(void)dc;(void)ac;(void)filtered;(void)peaks;(void)ibi;(void)bpmInstant;
+-  (void)hr;(void)spo2;(void)diag;(void)session;(void)processingUs;
++  (void)hr;(void)spo2;(void)diag;(void)measurementSession;(void)processingUs;
++#endif
++}
++
++void logLossEvent(uint32_t hardware,uint32_t software,uint32_t shortRead,uint32_t sequence){
++#if BIO_RESEARCH_MODE
++  if(!active||currentMode==LogMode::OFF)return;
++  pendingLoss.hardware+=hardware;pendingLoss.software+=software;
++  pendingLoss.shortRead+=shortRead;pendingLoss.sequence=sequence;pendingLoss.pending=true;
++#else
++  (void)hardware;(void)software;(void)shortRead;(void)sequence;
+ #endif
+ }
+ 
+ void update(){
+ #if BIO_RESEARCH_MODE
+-  buildLine();if(txPos>=txLen)return;
+-  const int room=Serial.availableForWrite();if(room<=0)return;
+-  const size_t remaining=txLen-txPos,n=min((size_t)room,remaining);
+-  Serial.write((const uint8_t*)tx+txPos,n);txPos+=n;
+-  if(txPos>=txLen){txPos=txLen=0;buildLine();}
++  if(txPos>=txLen){txPos=txLen=0;buildLossLine();buildSampleLine();}
++  if(txPos>=txLen)return;
++  // Una única llamada mantiene el mutex UART del core ESP32 durante toda la
++  // línea. Evita que logs Wi-Fi del segundo núcleo partan un registro @VW_*.
++  Serial.write((const uint8_t*)tx+txPos,txLen-txPos);txPos=txLen;
++#endif
++}
++
++bool handleSerialLine(char *line){
++#if BIO_RESEARCH_MODE
++  if(!line)return false;
++  char *save=nullptr;
++  char *root=strtok_r(line," \t",&save);
++  if(!root||strcmp(root,"BIO")!=0)return false;
++  // Los comandos son poco frecuentes y explícitos. Terminar la línea en curso
++  // impide que una respuesta de control se inserte dentro de un @VW_RAW.
++  finishPendingLine();
++  char *command=strtok_r(nullptr," \t",&save);
++  if(!command){Serial.println(F("[WARN][BIO-LAB] comando incompleto; BIO HELP"));return true;}
++  if(strcmp(command,"HELP")==0){
++    Serial.println(F("[INFO][BIO-LAB] BIO MODE OFF|RAW|FULL | BIO TEST START <test> <subject> | BIO TEST STOP | BIO MARK <tag> | BIO REF HR|SPO2 <value> | BIO STATUS"));return true;
++  }
++  if(strcmp(command,"MODE")==0){
++    if(active){Serial.println(F("[WARN][BIO-LAB] no cambie MODE durante una sesion"));return true;}
++    char *value=strtok_r(nullptr," \t",&save);
++    if(value&&strcmp(value,"OFF")==0)currentMode=LogMode::OFF;
++    else if(value&&strcmp(value,"RAW")==0)currentMode=LogMode::RAW;
++    else if(value&&strcmp(value,"FULL")==0)currentMode=LogMode::FULL;
++    else {Serial.println(F("[WARN][BIO-LAB] modo invalido"));return true;}
++    Serial.printf("[INFO][BIO-LAB] modo=%s\n",modeName(currentMode));return true;
++  }
++  if(strcmp(command,"TEST")==0){
++    char *action=strtok_r(nullptr," \t",&save);
++    if(action&&strcmp(action,"START")==0){
++      char *test=strtok_r(nullptr," \t",&save),*subject=strtok_r(nullptr," \t",&save);
++      if(!safeToken(test)||!safeToken(subject)){Serial.println(F("[WARN][BIO-LAB] use IDs alfanumericos, _ - o . (max 31)"));return true;}
++      if(active){Serial.println(F("[WARN][BIO-LAB] ya existe una sesion activa"));return true;}
++      if(currentMode==LogMode::OFF){Serial.println(F("[WARN][BIO-LAB] seleccione RAW o FULL antes de START"));return true;}
++      snprintf(testId,sizeof(testId),"%s",test);snprintf(subjectId,sizeof(subjectId),"%s",subject);
++      sessionId=(uint32_t)(MonotonicMicros::now()&0xFFFFFFFFu);if(sessionId==0)sessionId=1;
++      sessionSamples=0;dropped=0;head=tail=count=0;txLen=txPos=0;pendingLoss={0,0,0,0,false};active=true;
++      emitMetadata();Serial.printf("@VW_EVT,%lu,%llu,SESSION_START,0,0,0,%s\n",(unsigned long)sessionId,(unsigned long long)MonotonicMicros::now(),testId);
++      return true;
++    }
++    if(action&&strcmp(action,"STOP")==0){
++      active=false;
++      flushSessionQueue();
++      Serial.printf("@VW_EVT,%lu,%llu,SESSION_STOP,%lu,%lu,0,normal\n",(unsigned long)sessionId,(unsigned long long)MonotonicMicros::now(),(unsigned long)sessionSamples,(unsigned long)dropped);
++      emitStatus();return true;
++    }
++  }
++  if(strcmp(command,"MARK")==0){
++    char *tag=strtok_r(nullptr," \t",&save);if(!safeToken(tag)){Serial.println(F("[WARN][BIO-LAB] marca invalida"));return true;}
++    Serial.printf("@VW_EVT,%lu,%llu,MARK,0,0,0,%s\n",(unsigned long)sessionId,(unsigned long long)MonotonicMicros::now(),tag);return true;
++  }
++  if(strcmp(command,"REF")==0){
++    char *kind=strtok_r(nullptr," \t",&save),*value=strtok_r(nullptr," \t",&save);
++    if(!kind||!value||(strcmp(kind,"HR")!=0&&strcmp(kind,"SPO2")!=0)){Serial.println(F("[WARN][BIO-LAB] use BIO REF HR|SPO2 <valor>"));return true;}
++    char *end=nullptr;const float number=strtof(value,&end);if(end==value||*end!='\0'){Serial.println(F("[WARN][BIO-LAB] referencia no numerica"));return true;}
++    Serial.printf("@VW_REF,%lu,%llu,%s,%.3f,MANUAL\n",(unsigned long)sessionId,(unsigned long long)MonotonicMicros::now(),kind,number);return true;
++  }
++  if(strcmp(command,"STATUS")==0){emitStatus();return true;}
++  Serial.println(F("[WARN][BIO-LAB] comando desconocido; BIO HELP"));return true;
++#else
++  (void)line;return false;
+ #endif
+ }
+ 
+@@ -105,4 +267,18 @@ uint32_t droppedRecords(){
+   return 0;
+ #endif
+ }
++LogMode mode(){
++#if BIO_RESEARCH_MODE
++  return currentMode;
++#else
++  return LogMode::OFF;
++#endif
++}
++bool sessionActive(){
++#if BIO_RESEARCH_MODE
++  return active;
++#else
++  return false;
++#endif
++}
+ }
+diff --git a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/VitalWatch_BIOSYS_1_0_8.ino b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/Laboratorio_Pruebas_MAX30102_2026_09_17.ino
+index ffaf246..5608e13 100644
+--- a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/firmware/VitalWatch_BIOSYS_1_0_8/VitalWatch_BIOSYS_1_0_8.ino
++++ b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/Laboratorio_Pruebas_MAX30102_2026_09_17.ino
+@@ -385,8 +385,34 @@ static inline void procesarBotonesSistema() {
+ // MONITOR SERIE - respaldo de desarrollo
+ // ============================================================================
+ static inline void procesarSerie() {
++  static char bioLine[128];
++  static uint8_t bioLength = 0;
++  static bool collectingBio = false;
+   while (Serial.available()) {
+     const char comando = Serial.read();
++    if (collectingBio) {
++      if (comando == '\n' || comando == '\r') {
++        if (bioLength > 0) {
++          bioLine[bioLength] = '\0';
++          BioResearch::handleSerialLine(bioLine);
++        }
++        bioLength = 0;
++        collectingBio = false;
++      } else if (bioLength < sizeof(bioLine) - 1) {
++        bioLine[bioLength++] = comando;
++      } else {
++        bioLength = 0;
++        collectingBio = false;
++        Serial.println(F("[WARN][BIO-LAB] linea demasiado larga; descartada"));
++      }
++      continue;
++    }
++    if (comando == 'B') {
++      collectingBio = true;
++      bioLength = 0;
++      bioLine[bioLength++] = comando;
++      continue;
++    }
+     if (comando == '\n' || comando == '\r') continue;
+ 
+     switch (comando) {
+@@ -482,7 +508,7 @@ static inline void procesarSerie() {
+ // SETUP
+ // ============================================================================
+ void setup() {
+-  Serial.begin(115200);
++  Serial.begin(VitalWatchConfig::LAB_SERIAL_BAUD);
+   delay(50); // solo para estabilizar el puerto durante el arranque
+ 
+   // [BIOSYS-C3] Estado compartido antes de iniciar UI, sensores y red.
+diff --git a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/libraries/SparkFun_MAX3010x_Pulse_and_Proximity_Sensor_Library/src/MAX30105.h b/libraries/SparkFun_MAX3010x_Lab/src/MAX30105.h
+index 0dcace7..c1df324 100644
+--- a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/libraries/SparkFun_MAX3010x_Pulse_and_Proximity_Sensor_Library/src/MAX30105.h
++++ b/libraries/SparkFun_MAX3010x_Lab/src/MAX30105.h
+@@ -39,12 +39,20 @@
+ #else
+ 
+   //The catch-all default is 32
+-  #define I2C_BUFFER_LENGTH 32
++  #ifndef I2C_BUFFER_LENGTH
++    #define I2C_BUFFER_LENGTH 32
++  #endif
+ 
+ #endif
+ 
+ class MAX30105 {
+  public: 
++  enum ReadStatus : uint8_t {
++    READ_OK = 0,
++    READ_SHORT = 1,
++    READ_I2C_ERROR = 2
++  };
++
+   MAX30105(void);
+ 
+   boolean begin(TwoWire &wirePort = Wire, uint32_t i2cSpeed = I2C_SPEED_STANDARD, uint8_t i2caddr = MAX30105_ADDRESS);
+@@ -105,6 +113,14 @@ class MAX30105 {
+   uint32_t getFIFORed(void); //Returns the FIFO sample pointed to by tail
+   uint32_t getFIFOIR(void); //Returns the FIFO sample pointed to by tail
+   uint32_t getFIFOGreen(void); //Returns the FIFO sample pointed to by tail
++  uint32_t getSoftwareOverflowCount(void) const;
++  uint32_t getShortReadCount(void) const;
++  uint32_t getHardwareOverflowCount(void) const;
++  uint16_t getLastCheckFound(void) const;
++  uint8_t getLastHardwareOverflow(void) const;
++  uint8_t getLastReadPointer(void) const;
++  uint8_t getLastWritePointer(void) const;
++  ReadStatus getLastReadStatus(void) const;
+ 
+   uint8_t getWritePointer(void);
+   uint8_t getReadPointer(void);
+@@ -149,8 +165,18 @@ class MAX30105 {
+     uint32_t green[STORAGE_SIZE];
+     byte head;
+     byte tail;
++    byte count;
+   } sense_struct; //This is our circular buffer of readings from the sensor
+ 
+   sense_struct sense;
++  uint32_t softwareOverflowCount;
++  uint32_t shortReadCount;
++  uint32_t hardwareOverflowCount;
++  uint16_t lastCheckFound;
++  uint8_t lastHardwareOverflow;
++  uint8_t lastOverflowSnapshot;
++  uint8_t lastReadPointer;
++  uint8_t lastWritePointer;
++  ReadStatus lastReadStatus;
+ 
+ };
+diff --git a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/libraries/SparkFun_MAX3010x_Pulse_and_Proximity_Sensor_Library/src/MAX30105.cpp b/libraries/SparkFun_MAX3010x_Lab/src/MAX30105.cpp
+index f2a9d43..6de7035 100644
+--- a/baseline_extracted/VitalWatch_BIOSYS_1_0_8_Cowork/libraries/SparkFun_MAX3010x_Pulse_and_Proximity_Sensor_Library/src/MAX30105.cpp
++++ b/libraries/SparkFun_MAX3010x_Lab/src/MAX30105.cpp
+@@ -136,7 +136,16 @@ static const uint8_t SLOT_GREEN_PILOT = 		0x07;
+ static const uint8_t MAX_30105_EXPECTEDPARTID = 0x15;
+ 
+ MAX30105::MAX30105() {
+-  // Constructor
++  memset(&sense, 0, sizeof(sense));
++  softwareOverflowCount = 0;
++  shortReadCount = 0;
++  hardwareOverflowCount = 0;
++  lastCheckFound = 0;
++  lastHardwareOverflow = 0;
++  lastOverflowSnapshot = 0;
++  lastReadPointer = 0;
++  lastWritePointer = 0;
++  lastReadStatus = READ_OK;
+ }
+ 
+ boolean MAX30105::begin(TwoWire &wirePort, uint32_t i2cSpeed, uint8_t i2caddr) {
+@@ -331,6 +340,18 @@ void MAX30105::clearFIFO(void) {
+   writeRegister8(_i2caddr, MAX30105_FIFOWRITEPTR, 0);
+   writeRegister8(_i2caddr, MAX30105_FIFOOVERFLOW, 0);
+   writeRegister8(_i2caddr, MAX30105_FIFOREADPTR, 0);
++  sense.head = 0;
++  sense.tail = 0;
++  sense.count = 0;
++  softwareOverflowCount = 0;
++  shortReadCount = 0;
++  hardwareOverflowCount = 0;
++  lastCheckFound = 0;
++  lastHardwareOverflow = 0;
++  lastOverflowSnapshot = 0;
++  lastReadPointer = 0;
++  lastWritePointer = 0;
++  lastReadStatus = READ_OK;
+ }
+ 
+ //Enable roll over if FIFO over flows
+@@ -521,10 +542,7 @@ void MAX30105::setup(byte powerLevel, byte sampleAverage, byte ledMode, int samp
+ //Tell caller how many samples are available
+ uint8_t MAX30105::available(void)
+ {
+-  int8_t numberOfSamples = sense.head - sense.tail;
+-  if (numberOfSamples < 0) numberOfSamples += STORAGE_SIZE;
+-
+-  return (numberOfSamples);
++  return sense.count;
+ }
+ 
+ //Report the most recent red value
+@@ -532,7 +550,7 @@ uint32_t MAX30105::getRed(void)
+ {
+   //Check the sensor for new data for 250ms
+   if(safeCheck(250))
+-    return (sense.red[sense.head]);
++    return (sense.red[(sense.head + STORAGE_SIZE - 1) % STORAGE_SIZE]);
+   else
+     return(0); //Sensor failed to find new data
+ }
+@@ -542,7 +560,7 @@ uint32_t MAX30105::getIR(void)
+ {
+   //Check the sensor for new data for 250ms
+   if(safeCheck(250))
+-    return (sense.IR[sense.head]);
++    return (sense.IR[(sense.head + STORAGE_SIZE - 1) % STORAGE_SIZE]);
+   else
+     return(0); //Sensor failed to find new data
+ }
+@@ -552,7 +570,7 @@ uint32_t MAX30105::getGreen(void)
+ {
+   //Check the sensor for new data for 250ms
+   if(safeCheck(250))
+-    return (sense.green[sense.head]);
++    return (sense.green[(sense.head + STORAGE_SIZE - 1) % STORAGE_SIZE]);
+   else
+     return(0); //Sensor failed to find new data
+ }
+@@ -582,9 +600,19 @@ void MAX30105::nextSample(void)
+   {
+     sense.tail++;
+     sense.tail %= STORAGE_SIZE; //Wrap condition
++    sense.count--;
+   }
+ }
+ 
++uint32_t MAX30105::getSoftwareOverflowCount(void) const { return softwareOverflowCount; }
++uint32_t MAX30105::getShortReadCount(void) const { return shortReadCount; }
++uint32_t MAX30105::getHardwareOverflowCount(void) const { return hardwareOverflowCount; }
++uint16_t MAX30105::getLastCheckFound(void) const { return lastCheckFound; }
++uint8_t MAX30105::getLastHardwareOverflow(void) const { return lastHardwareOverflow; }
++uint8_t MAX30105::getLastReadPointer(void) const { return lastReadPointer; }
++uint8_t MAX30105::getLastWritePointer(void) const { return lastWritePointer; }
++MAX30105::ReadStatus MAX30105::getLastReadStatus(void) const { return lastReadStatus; }
++
+ //Polls the sensor for new data
+ //Call regularly
+ //If new data is available, it updates the head and tail in the main struct
+@@ -594,10 +622,42 @@ uint16_t MAX30105::check(void)
+   //Read register FIDO_DATA in (3-byte * number of active LED) chunks
+   //Until FIFO_RD_PTR = FIFO_WR_PTR
+ 
+-  byte readPointer = getReadPointer();
+-  byte writePointer = getWritePointer();
++  // MAX30102, datasheet p. 15: WR_PTR, OVF_COUNTER y RD_PTR forman la
++  // fotografia previa a la lectura del FIFO. Leer los tres en una misma
++  // transaccion evita combinar estados de instantes diferentes.
++  byte writePointer = 0;
++  byte overflowCounter = 0;
++  byte readPointer = 0;
+ 
+   int numberOfSamples = 0;
++  uint16_t storedSamples = 0;
++  lastCheckFound = 0;
++  lastHardwareOverflow = 0;
++  lastReadStatus = READ_OK;
++
++  _i2cPort->beginTransmission(_i2caddr);
++  _i2cPort->write(MAX30105_FIFOWRITEPTR);
++  if (_i2cPort->endTransmission(false) != 0 ||
++      _i2cPort->requestFrom(_i2caddr, (uint8_t)3) != 3)
++  {
++    while (_i2cPort->available()) (void)_i2cPort->read();
++    shortReadCount++;
++    lastReadStatus = READ_I2C_ERROR;
++    return 0;
++  }
++  writePointer = (byte)_i2cPort->read() & 0x1F;
++  overflowCounter = (byte)_i2cPort->read() & 0x1F;
++  readPointer = (byte)_i2cPort->read() & 0x1F;
++  lastWritePointer = writePointer;
++  lastReadPointer = readPointer;
++  lastHardwareOverflow = overflowCounter;
++  // OVF se satura y se reinicia al extraer una muestra; no es un contador con
++  // rollover. Mientras no se extraiga nada, sumar solo el incremento nuevo.
++  if (overflowCounter >= lastOverflowSnapshot)
++    hardwareOverflowCount += overflowCounter - lastOverflowSnapshot;
++  else
++    hardwareOverflowCount += overflowCounter;
++  lastOverflowSnapshot = overflowCounter;
+ 
+   //Do we have new data?
+   if (readPointer != writePointer)
+@@ -605,6 +665,7 @@ uint16_t MAX30105::check(void)
+     //Calculate the number of readings we need to get from sensor
+     numberOfSamples = writePointer - readPointer;
+     if (numberOfSamples < 0) numberOfSamples += 32; //Wrap condition
++    lastCheckFound = (uint16_t)numberOfSamples;
+ 
+     //We now have the number of readings, now calc bytes to read
+     //For this example we are just doing Red and IR (3 bytes each)
+@@ -630,18 +691,25 @@ uint16_t MAX30105::check(void)
+         toGet = I2C_BUFFER_LENGTH - (I2C_BUFFER_LENGTH % (activeLEDs * 3)); //Trim toGet to be a multiple of the samples we need to read
+       }
+ 
+-      bytesLeftToRead -= toGet;
+-
+       //Request toGet number of bytes from sensor
+-      _i2cPort->requestFrom(MAX30105_ADDRESS, toGet);
++      const size_t received = _i2cPort->requestFrom(MAX30105_ADDRESS, toGet);
++      if (received != (size_t)toGet)
++      {
++        while (_i2cPort->available()) (void)_i2cPort->read();
++        shortReadCount++;
++        lastReadStatus = READ_SHORT;
++        break;
++      }
++
++      bytesLeftToRead -= toGet;
+       
+       while (toGet > 0)
+       {
+-        sense.head++; //Advance the head of the storage struct
+-        sense.head %= STORAGE_SIZE; //Wrap condition
+-
+         byte temp[sizeof(uint32_t)]; //Array of 4 bytes that we will convert into long
+         uint32_t tempLong;
++        uint32_t redValue = 0;
++        uint32_t irValue = 0;
++        uint32_t greenValue = 0;
+ 
+         //Burst read three bytes - RED
+         temp[3] = 0;
+@@ -653,8 +721,7 @@ uint16_t MAX30105::check(void)
+         memcpy(&tempLong, temp, sizeof(tempLong));
+ 		
+ 		tempLong &= 0x3FFFF; //Zero out all but 18 bits
+-
+-        sense.red[sense.head] = tempLong; //Store this reading into the sense array
++        redValue = tempLong;
+ 
+         if (activeLEDs > 1)
+         {
+@@ -668,8 +735,7 @@ uint16_t MAX30105::check(void)
+           memcpy(&tempLong, temp, sizeof(tempLong));
+ 
+ 		  tempLong &= 0x3FFFF; //Zero out all but 18 bits
+-          
+-		  sense.IR[sense.head] = tempLong;
++          irValue = tempLong;
+         }
+ 
+         if (activeLEDs > 2)
+@@ -684,9 +750,23 @@ uint16_t MAX30105::check(void)
+           memcpy(&tempLong, temp, sizeof(tempLong));
+ 
+ 		  tempLong &= 0x3FFFF; //Zero out all but 18 bits
++          greenValue = tempLong;
++        }
+ 
+-          sense.green[sense.head] = tempLong;
++        // `head` apunta siempre a la proxima celda de escritura. Si la cola
++        // esta llena se descarta la muestra mas antigua y se contabiliza.
++        if (sense.count == STORAGE_SIZE)
++        {
++          sense.tail = (sense.tail + 1) % STORAGE_SIZE;
++          sense.count--;
++          softwareOverflowCount++;
+         }
++        sense.red[sense.head] = redValue;
++        sense.IR[sense.head] = irValue;
++        sense.green[sense.head] = greenValue;
++        sense.head = (sense.head + 1) % STORAGE_SIZE;
++        sense.count++;
++        storedSamples++;
+ 
+         toGet -= activeLEDs * 3;
+       }
+@@ -695,7 +775,8 @@ uint16_t MAX30105::check(void)
+ 
+   } //End readPtr != writePtr
+ 
+-  return (numberOfSamples); //Let the world know how much new data we found
++  if (storedSamples > 0) lastOverflowSnapshot = 0;
++  return storedSamples; //Solo muestras completas, decodificadas y almacenadas.
+ }
+ 
+ //Check for new data but give up after a certain amount of time
+diff --git a/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/MonotonicMicros.h b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/MonotonicMicros.h
+new file mode 100644
+index 0000000..e8c72b1
+--- /dev/null
++++ b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/MonotonicMicros.h
+@@ -0,0 +1,13 @@
++#ifndef VITALWATCH_MONOTONIC_MICROS_H
++#define VITALWATCH_MONOTONIC_MICROS_H
++
++#include <Arduino.h>
++
++// Extiende el contador micros() de 32 bits sin alterar la fuente de tiempo.
++// Debe llamarse desde el loop principal; no se usa desde ISR.
++namespace MonotonicMicros {
++  uint64_t now();
++  void resetForTest(uint32_t rawValue = 0);
++}
++
++#endif
+diff --git a/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/MonotonicMicros.cpp b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/MonotonicMicros.cpp
+new file mode 100644
+index 0000000..12f8667
+--- /dev/null
++++ b/firmware/Laboratorio_Pruebas_MAX30102_2026_09_17/MonotonicMicros.cpp
+@@ -0,0 +1,27 @@
++#include "MonotonicMicros.h"
++
++namespace {
++uint32_t previousRaw = 0;
++uint64_t epoch = 0;
++bool initialized = false;
++}
++
++namespace MonotonicMicros {
++uint64_t now() {
++  const uint32_t raw = micros();
++  if (!initialized) {
++    previousRaw = raw;
++    initialized = true;
++    return raw;
++  }
++  if (raw < previousRaw) epoch += (1ULL << 32);
++  previousRaw = raw;
++  return epoch | (uint64_t)raw;
++}
++
++void resetForTest(uint32_t rawValue) {
++  previousRaw = rawValue;
++  epoch = 0;
++  initialized = rawValue != 0;
++}
++}
+diff --git a/tools/capture_biomed.py b/tools/capture_biomed.py
+new file mode 100644
+index 0000000..58e4834
+--- /dev/null
++++ b/tools/capture_biomed.py
+@@ -0,0 +1,295 @@
++#!/usr/bin/env python3
++"""Captura reproducible del laboratorio VitalWatch MAX30102.
++
++Conserva el flujo serie exacto y separa los registros @VW_* en artefactos CSV.
++Requiere ``pyserial`` solamente para una captura física; el parser se prueba sin
++hardware y sin esa dependencia.
++"""
++from __future__ import annotations
++
++import argparse
++import csv
++import json
++import queue
++import re
++import sys
++import threading
++import time
++from dataclasses import dataclass, field
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Iterable
++
++RAW_COLUMNS = [
++    "schema_version", "session_id", "sample_index", "sample_time_us",
++    "service_time_us", "timestamp_source", "read_valid", "timing_valid",
++    "red_raw", "ir_raw", "check_found", "software_available",
++    "hardware_overflow_raw", "hardware_overflow_total",
++    "software_overflow_total", "short_read_total", "sequence_gap_total",
++    "logger_drop_total", "imu_valid", "imu_time_us", "ax_g", "ay_g",
++    "az_g", "acceleration_magnitude_g", "gyro_magnitude_rad_s", "imu_dt_us",
++    "imu_saturated",
++]
++
++FULL_COLUMNS = [
++    "ir_dc", "ir_ac", "ir_filtered", "peak_bits", "ibi_ms", "bpm_instant",
++    "bpm_result", "hr_status", "hr_quality", "hr_quality_flags",
++    "spo2_result", "spo2_status", "spo2_quality", "led_amplitude",
++    "spo2_maxim", "spo2_maxim_valid", "spo2_research_candidate",
++    "measurement_state", "processing_us", "loop_last_us", "loop_max_us",
++    "display_render_us", "i2c_failures",
++]
++
++EVENT_COLUMNS = [
++    "session_id", "device_time_us", "event_type", "value_1", "value_2",
++    "value_3", "note",
++]
++REFERENCE_COLUMNS = [
++    "session_id", "device_time_us", "reference_type", "value", "source",
++]
++STATUS_COLUMNS = [
++    "session_id", "device_time_us", "mode", "active", "queue_depth",
++    "logger_drop_total", "session_samples", "hardware_overflow_total",
++    "software_overflow_total", "short_read_total", "sequence_gap_total",
++    "max_fifo_backlog",
++]
++
++
++def _csv_fields(text: str) -> list[str]:
++    return next(csv.reader([text]))
++
++
++def parse_protocol_line(text: str) -> tuple[str, object] | None:
++    """Parsea una línea; lanza ValueError para registros @VW_* corruptos."""
++    line = text.rstrip("\r\n")
++    if not line.startswith("@VW_"):
++        return None
++    fields = _csv_fields(line)
++    record_type = fields[0]
++    if record_type == "@VW_META":
++        if len(fields) != 3 or not fields[1]:
++            raise ValueError("META requiere clave y valor")
++        return "meta", (fields[1], fields[2])
++    if record_type == "@VW_RAW":
++        if len(fields) not in (1 + len(RAW_COLUMNS), 1 + len(RAW_COLUMNS) + len(FULL_COLUMNS)):
++            raise ValueError(f"RAW tiene {len(fields)} campos")
++        values = fields[1:]
++        if len(values) == len(RAW_COLUMNS):
++            values += [""] * len(FULL_COLUMNS)
++        return "sample", dict(zip(RAW_COLUMNS + FULL_COLUMNS, values))
++    if record_type == "@VW_EVT":
++        if len(fields) != 1 + len(EVENT_COLUMNS):
++            raise ValueError(f"EVT tiene {len(fields)} campos")
++        return "event", dict(zip(EVENT_COLUMNS, fields[1:]))
++    if record_type == "@VW_REF":
++        if len(fields) != 1 + len(REFERENCE_COLUMNS):
++            raise ValueError(f"REF tiene {len(fields)} campos")
++        return "reference", dict(zip(REFERENCE_COLUMNS, fields[1:]))
++    if record_type == "@VW_STAT":
++        if len(fields) != 1 + len(STATUS_COLUMNS):
++            raise ValueError(f"STAT tiene {len(fields)} campos")
++        return "status", dict(zip(STATUS_COLUMNS, fields[1:]))
++    raise ValueError(f"tipo desconocido: {record_type}")
++
++
++@dataclass
++class CaptureSummary:
++    received_lines: int = 0
++    protocol_lines: int = 0
++    samples: int = 0
++    events: int = 0
++    references: int = 0
++    statuses: int = 0
++    corrupt_protocol_lines: int = 0
++    sequence_gaps_observed: int = 0
++    duplicate_sequences: int = 0
++    first_sequence: int | None = None
++    last_sequence: int | None = None
++    started_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
++    ended_utc: str | None = None
++
++    def observe_sequence(self, value: str) -> None:
++        sequence = int(value)
++        if self.first_sequence is None:
++            self.first_sequence = sequence
++        if self.last_sequence is not None:
++            if sequence == self.last_sequence:
++                self.duplicate_sequences += 1
++            elif sequence > self.last_sequence + 1:
++                self.sequence_gaps_observed += sequence - self.last_sequence - 1
++        self.last_sequence = sequence
++
++
++class SessionWriter:
++    def __init__(self, directory: Path, host_metadata: dict[str, object]):
++        directory.mkdir(parents=True, exist_ok=False)
++        self.directory = directory
++        self.metadata: dict[str, object] = {"host": host_metadata, "device": {}}
++        self.summary = CaptureSummary()
++        self.raw_log = (directory / "serial_raw.log").open("wb")
++        self.samples_file, self.samples = self._csv("samples.csv", RAW_COLUMNS + FULL_COLUMNS)
++        self.events_file, self.events = self._csv("events.csv", EVENT_COLUMNS)
++        self.references_file, self.references = self._csv("reference.csv", REFERENCE_COLUMNS)
++        self.status_file, self.status = self._csv("status.csv", STATUS_COLUMNS)
++
++    def _csv(self, name: str, columns: list[str]):
++        handle = (self.directory / name).open("w", encoding="utf-8", newline="")
++        writer = csv.DictWriter(handle, fieldnames=columns)
++        writer.writeheader()
++        return handle, writer
++
++    def consume(self, raw: bytes) -> None:
++        self.raw_log.write(raw)
++        self.raw_log.flush()
++        self.summary.received_lines += 1
++        text = raw.decode("utf-8", errors="replace")
++        try:
++            parsed = parse_protocol_line(text)
++        except (ValueError, csv.Error, UnicodeError) as exc:
++            if text.lstrip().startswith("@VW_"):
++                self.summary.corrupt_protocol_lines += 1
++                self.events.writerow({
++                    "session_id": "", "device_time_us": "",
++                    "event_type": "HOST_PARSE_ERROR", "value_1": "",
++                    "value_2": "", "value_3": "", "note": str(exc),
++                })
++                self.events_file.flush()
++            return
++        if parsed is None:
++            return
++        self.summary.protocol_lines += 1
++        kind, payload = parsed
++        if kind == "meta":
++            key, value = payload
++            self.metadata["device"][key] = value
++        elif kind == "sample":
++            self.samples.writerow(payload)
++            self.samples_file.flush()
++            self.summary.samples += 1
++            self.summary.observe_sequence(payload["sample_index"])
++        elif kind == "event":
++            self.events.writerow(payload); self.events_file.flush(); self.summary.events += 1
++        elif kind == "reference":
++            self.references.writerow(payload); self.references_file.flush(); self.summary.references += 1
++        elif kind == "status":
++            self.status.writerow(payload); self.status_file.flush(); self.summary.statuses += 1
++
++    def close(self) -> None:
++        self.summary.ended_utc = datetime.now(timezone.utc).isoformat()
++        for handle in (self.raw_log, self.samples_file, self.events_file,
++                       self.references_file, self.status_file):
++            handle.close()
++        (self.directory / "metadata.json").write_text(
++            json.dumps(self.metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
++        (self.directory / "session_summary.json").write_text(
++            json.dumps(self.summary.__dict__, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
++
++
++def _safe_name(value: str) -> str:
++    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._")
++    if not cleaned:
++        raise ValueError("identificador vacío")
++    return cleaned[:31]
++
++
++def _stdin_commands(target: queue.SimpleQueue[str]) -> None:
++    for line in sys.stdin:
++        command = line.strip()
++        if command:
++            target.put(command)
++
++
++def list_ports() -> int:
++    try:
++        from serial.tools import list_ports as serial_list_ports
++    except ImportError:
++        print("Falta pyserial: instale con 'python -m pip install pyserial'", file=sys.stderr)
++        return 2
++    for port in serial_list_ports.comports():
++        print(f"{port.device}\t{port.description}\t{port.hwid}")
++    return 0
++
++
++def capture(args: argparse.Namespace) -> int:
++    try:
++        import serial
++    except ImportError:
++        print("Falta pyserial: instale con 'python -m pip install pyserial'", file=sys.stderr)
++        return 2
++    test_id, subject_id = _safe_name(args.test_id), _safe_name(args.subject_id)
++    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
++    output = Path(args.output).resolve() / f"{stamp}_{test_id}_{subject_id}"
++    writer = SessionWriter(output, {
++        "tool": "capture_biomed.py", "port": args.port, "baud": args.baud,
++        "requested_mode": args.mode, "test_id": test_id, "subject_id": subject_id,
++    })
++    commands: queue.SimpleQueue[str] = queue.SimpleQueue()
++    if not args.no_stdin:
++        threading.Thread(target=_stdin_commands, args=(commands,), daemon=True).start()
++    ser = None
++    try:
++        ser = serial.Serial(args.port, args.baud, timeout=0.1, write_timeout=1)
++        time.sleep(args.boot_wait)
++        ser.reset_input_buffer()
++        for command in (f"BIO MODE {args.mode}", f"BIO TEST START {test_id} {subject_id}"):
++            ser.write((command + "\n").encode("ascii")); ser.flush()
++        print(f"Capturando en {output}")
++        print("Puede escribir BIO MARK ..., BIO REF HR ..., BIO REF SPO2 ..., BIO STATUS o STOP.")
++        started = time.monotonic()
++        stopping = False
++        stop_sent_at = 0.0
++        while True:
++            raw = ser.readline()
++            if raw:
++                writer.consume(raw)
++            while not commands.empty():
++                command = commands.get()
++                if command.upper() == "STOP":
++                    command = "BIO TEST STOP"; stopping = True; stop_sent_at = time.monotonic()
++                elif not command.startswith("BIO "):
++                    print("Comando rechazado: debe comenzar con BIO o ser STOP.")
++                    continue
++                ser.write((command + "\n").encode("ascii")); ser.flush()
++            if args.duration and not stopping and time.monotonic() - started >= args.duration:
++                ser.write(b"BIO TEST STOP\n"); ser.flush(); stopping = True; stop_sent_at = time.monotonic()
++            if stopping and time.monotonic() - stop_sent_at >= 1.0:
++                break
++    except KeyboardInterrupt:
++        if ser and ser.is_open:
++            ser.write(b"BIO TEST STOP\n"); ser.flush(); time.sleep(0.5)
++    finally:
++        if ser:
++            ser.close()
++        writer.close()
++    print(f"Sesión cerrada: {writer.summary.samples} muestras; "
++          f"{writer.summary.corrupt_protocol_lines} líneas estructuradas corruptas.")
++    return 0
++
++
++def build_parser() -> argparse.ArgumentParser:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--list-ports", action="store_true")
++    parser.add_argument("--port")
++    parser.add_argument("--baud", type=int, default=460800)
++    parser.add_argument("--mode", choices=("RAW", "FULL"), default="FULL")
++    parser.add_argument("--test-id", default="baseline")
++    parser.add_argument("--subject-id", default="anon")
++    parser.add_argument("--output", default=str(Path(__file__).resolve().parents[1] / "RAW"))
++    parser.add_argument("--duration", type=float, default=0.0)
++    parser.add_argument("--boot-wait", type=float, default=1.0)
++    parser.add_argument("--no-stdin", action="store_true")
++    return parser
++
++
++def main(argv: Iterable[str] | None = None) -> int:
++    args = build_parser().parse_args(argv)
++    if args.list_ports:
++        return list_ports()
++    if not args.port:
++        print("--port es obligatorio (o use --list-ports)", file=sys.stderr)
++        return 2
++    return capture(args)
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/tools/requirements.txt b/tools/requirements.txt
+new file mode 100644
+index 0000000..d0dfd58
+--- /dev/null
++++ b/tools/requirements.txt
+@@ -0,0 +1 @@
++pyserial==3.5
+diff --git a/tests/test_acquisition_contract.py b/tests/test_acquisition_contract.py
+new file mode 100644
+index 0000000..eb2e57a
+--- /dev/null
++++ b/tests/test_acquisition_contract.py
+@@ -0,0 +1,319 @@
++"""CODEX REPRODUCTION TESTS for VitalWatch MAX30102 acquisition.
++
++These are new, independent tests derived from the exact baseline source and
++the written irregularity descriptions. They are not Cowork's original tests.
++"""
++
++from __future__ import annotations
++
++import csv
++import io
++import unittest
++from dataclasses import dataclass
++
++
++MASK_18_BIT = 0x3FFFF
++PERIOD_US = 40_000
++
++
++class BaselineRing:
++    """Exact index behavior used by the baseline SparkFun driver."""
++
++    def __init__(self, size: int = 4) -> None:
++        self.size = size
++        self.head = 0
++        self.tail = 0
++        self.data = [0] * size
++
++    def push(self, value: int) -> None:
++        self.head = (self.head + 1) % self.size
++        self.data[self.head] = value
++
++    def available(self) -> int:
++        count = self.head - self.tail
++        return count + self.size if count < 0 else count
++
++    def front(self) -> int:
++        return self.data[self.tail]
++
++    def pop(self) -> None:
++        if self.available():
++            self.tail = (self.tail + 1) % self.size
++
++
++class CorrectedRing:
++    """Reference contract expected from the experimental driver."""
++
++    def __init__(self, size: int = 4) -> None:
++        self.size = size
++        self.write = 0
++        self.read = 0
++        self.count = 0
++        self.software_overflow = 0
++        self.data = [0] * size
++
++    def push(self, value: int) -> None:
++        if self.count == self.size:
++            self.read = (self.read + 1) % self.size
++            self.count -= 1
++            self.software_overflow += 1
++        self.data[self.write] = value
++        self.write = (self.write + 1) % self.size
++        self.count += 1
++
++    def available(self) -> int:
++        return self.count
++
++    def front(self) -> int:
++        if not self.count:
++            raise IndexError("empty")
++        return self.data[self.read]
++
++    def pop(self) -> None:
++        if self.count:
++            self.read = (self.read + 1) % self.size
++            self.count -= 1
++
++
++def baseline_decode_three_bytes(values: list[int]) -> int:
++    """Replicates assigning Wire.read() to uint8_t and masking to 18 bits."""
++    b = [(value & 0xFF) for value in values]
++    return ((b[0] << 16) | (b[1] << 8) | b[2]) & MASK_18_BIT
++
++
++def corrected_decode_three_bytes(values: list[int]) -> tuple[str, int | None]:
++    if len(values) != 3 or any(value < 0 or value > 255 for value in values):
++        return "READ_SHORT", None
++    return "READ_OK", ((values[0] << 16) | (values[1] << 8) | values[2]) & MASK_18_BIT
++
++
++def baseline_batch(now_us: int, count: int) -> list[int]:
++    first = now_us - max(0, count - 1) * PERIOD_US
++    return [first + i * PERIOD_US for i in range(count)]
++
++
++class EstimatedTimeline:
++    def __init__(self) -> None:
++        self.last = 0
++
++    def batch(self, processing_us: int, count: int, gap_samples: int = 0) -> list[int]:
++        if count == 0:
++            return []
++        if not self.last:
++            first = processing_us - (count - 1) * PERIOD_US
++        else:
++            first = self.last + (gap_samples + 1) * PERIOD_US
++        result = [first + i * PERIOD_US for i in range(count)]
++        self.last = result[-1]
++        return result
++
++
++class MonotonicMicrosModel:
++    def __init__(self) -> None:
++        self.initialized = False
++        self.last32 = 0
++        self.epoch = 0
++
++    def extend(self, value: int) -> int:
++        value &= 0xFFFFFFFF
++        if self.initialized and value < self.last32:
++            self.epoch += 1 << 32
++        self.initialized = True
++        self.last32 = value
++        return self.epoch + value
++
++
++@dataclass
++class LossCounters:
++    hardware_overflow: int = 0
++    software_overflow: int = 0
++    short_read: int = 0
++    sequence_gap: int = 0
++    logger_drop: int = 0
++
++
++class SequenceTracker:
++    def __init__(self) -> None:
++        self.last: int | None = None
++        self.gaps = 0
++        self.duplicates = 0
++
++    def accept(self, value: int) -> None:
++        if self.last is not None:
++            if value == self.last:
++                self.duplicates += 1
++            elif value > self.last + 1:
++                self.gaps += value - self.last - 1
++        self.last = value
++
++
++class HardwareOverflowTracker:
++    """MAX30102 contract: OVF is per pre-pop snapshot, not a rollover clock."""
++
++    def __init__(self) -> None:
++        self.total = 0
++        self.last_snapshot = 0
++
++    def observe_before_fifo_pop(self, raw: int) -> None:
++        if not 0 <= raw <= 0x1F:
++            raise ValueError("invalid OVF_COUNTER")
++        self.total += raw - self.last_snapshot if raw >= self.last_snapshot else raw
++        self.last_snapshot = raw
++
++    def complete_fifo_pop(self) -> None:
++        self.last_snapshot = 0
++
++
++def corroborated_hardware_loss(raw_delta: int, found: int, service_gap_us: int) -> int:
++    fifo_capacity = 32
++    plausible = found >= fifo_capacity - 1 or service_gap_us >= fifo_capacity * PERIOD_US
++    return raw_delta if raw_delta and plausible else 0
++
++
++class TestBaselineReproduction(unittest.TestCase):
++    def test_irr001_fifo_order_is_independently_reproduced(self) -> None:
++        fifo = BaselineRing()
++        fifo.push(200)
++        first = fifo.front()
++        fifo.pop()
++        fifo.push(201)
++        second = fifo.front()
++        self.assertEqual([first, second], [0, 200])
++
++    def test_irr002_full_fifo_looks_empty_is_independently_reproduced(self) -> None:
++        fifo = BaselineRing()
++        for value in range(4):
++            fifo.push(value + 100)
++        self.assertEqual(fifo.head, fifo.tail)
++        self.assertEqual(fifo.available(), 0)
++
++    def test_irr003_short_read_becomes_262143_is_independently_reproduced(self) -> None:
++        self.assertEqual(baseline_decode_three_bytes([-1, -1, -1]), 262143)
++
++    def test_irr004_batch_reanchoring_changes_interval(self) -> None:
++        first = baseline_batch(160_000, 2)
++        second = baseline_batch(260_000, 2)
++        self.assertEqual(first, [120_000, 160_000])
++        self.assertEqual(second, [220_000, 260_000])
++        self.assertEqual(second[0] - first[-1], 60_000)
++
++    def test_irr005_cast_after_rollover_goes_backwards(self) -> None:
++        before = int(0xFFFFFF00)
++        after = int(0x00000100)
++        self.assertLess(after, before)
++        self.assertGreater((after - before) & 0xFFFFFFFFFFFFFFFF, 1 << 63)
++
++    def test_irr006_loss_dimensions_are_not_equivalent(self) -> None:
++        counters = LossCounters(hardware_overflow=1, short_read=1)
++        self.assertEqual(counters.software_overflow, 0)
++        self.assertEqual(counters.logger_drop, 0)
++        self.assertNotEqual(counters.hardware_overflow, counters.software_overflow)
++
++
++class TestCorrectedContract(unittest.TestCase):
++    def test_fifo_order(self) -> None:
++        fifo = CorrectedRing()
++        fifo.push(200)
++        fifo.push(201)
++        out = []
++        while fifo.available():
++            out.append(fifo.front())
++            fifo.pop()
++        self.assertEqual(out, [200, 201])
++
++    def test_fifo_full(self) -> None:
++        fifo = CorrectedRing()
++        for value in range(4):
++            fifo.push(value)
++        self.assertEqual(fifo.available(), 4)
++        self.assertEqual(fifo.software_overflow, 0)
++
++    def test_fifo_overflow_accounting(self) -> None:
++        fifo = CorrectedRing()
++        for value in range(5):
++            fifo.push(value)
++        self.assertEqual(fifo.available(), 4)
++        self.assertEqual(fifo.software_overflow, 1)
++        self.assertEqual(fifo.front(), 1)
++
++    def test_short_read_rejected(self) -> None:
++        status, value = corrected_decode_three_bytes([0x01, 0x02, -1])
++        self.assertEqual(status, "READ_SHORT")
++        self.assertIsNone(value)
++
++    def test_sample_sequence_gap_and_duplicate(self) -> None:
++        tracker = SequenceTracker()
++        for value in [1, 2, 2, 5]:
++            tracker.accept(value)
++        self.assertEqual(tracker.duplicates, 1)
++        self.assertEqual(tracker.gaps, 2)
++
++    def test_timestamp_monotonicity_with_processing_jitter(self) -> None:
++        timeline = EstimatedTimeline()
++        stamps = timeline.batch(160_000, 2) + timeline.batch(260_000, 2)
++        self.assertEqual(stamps, [120_000, 160_000, 200_000, 240_000])
++        self.assertTrue(all(b > a for a, b in zip(stamps, stamps[1:])))
++
++    def test_micros_rollover(self) -> None:
++        clock = MonotonicMicrosModel()
++        before = clock.extend(0xFFFFFF00)
++        after = clock.extend(0x00000100)
++        self.assertGreater(after, before)
++        self.assertEqual(after - before, 0x200)
++
++    def test_logger_drop_accounting(self) -> None:
++        counters = LossCounters()
++        capacity = 2
++        queue: list[int] = []
++        for value in range(3):
++            if len(queue) >= capacity:
++                counters.logger_drop += 1
++            else:
++                queue.append(value)
++        self.assertEqual(counters.logger_drop, 1)
++
++    def test_hardware_overflow_counter_reset_is_not_rollover(self) -> None:
++        tracker = HardwareOverflowTracker()
++        tracker.observe_before_fifo_pop(1)
++        tracker.observe_before_fifo_pop(1)  # mismo evento todavía pendiente
++        tracker.complete_fifo_pop()
++        # La lectura de una muestra reinicia OVF a cero. 1 -> 0 no son 31.
++        tracker.observe_before_fifo_pop(0)
++        self.assertEqual(tracker.total, 1)
++
++    def test_equal_hardware_pointers_do_not_create_phantom_samples(self) -> None:
++        read_pointer = write_pointer = 7
++        overflow_counter = 1
++        available = (write_pointer - read_pointer) % 32
++        self.assertEqual(available, 0)
++        self.assertEqual(overflow_counter, 1)
++
++    def test_startup_fifo_is_quarantined_before_first_service_sample(self) -> None:
++        stale_fifo = CorrectedRing(size=4)
++        for value in [10, 11, 12, 13]:
++            stale_fifo.push(value)
++        # Contrato del firmware: clearFIFO antes de aceptar la primera muestra
++        # del loop cooperativo; los valores acumulados durante setup no salen.
++        stale_fifo.write = stale_fifo.read = stale_fifo.count = 0
++        stale_fifo.push(100)
++        self.assertEqual(stale_fifo.front(), 100)
++        self.assertEqual(stale_fifo.available(), 1)
++
++    def test_unphysical_overflow_raw_is_logged_but_not_sequence_loss(self) -> None:
++        self.assertEqual(corroborated_hardware_loss(1, found=1, service_gap_us=40_000), 0)
++        self.assertEqual(corroborated_hardware_loss(1, found=31, service_gap_us=40_000), 1)
++        self.assertEqual(corroborated_hardware_loss(2, found=1, service_gap_us=1_280_000), 2)
++
++    def test_csv_parsing_and_corrupt_line_handling(self) -> None:
++        good = "schema_version,session_id,sample_index,red_raw,ir_raw\n1,S1,1,100,200\n"
++        rows = list(csv.DictReader(io.StringIO(good)))
++        self.assertEqual(rows[0]["ir_raw"], "200")
++
++        corrupt = "@VW_RAW,1,S1,not_an_index,100\n"
++        parts = corrupt.strip().split(",")
++        with self.assertRaises(ValueError):
++            int(parts[3])
++
++
++if __name__ == "__main__":
++    unittest.main(verbosity=2)
+diff --git a/tests/test_capture_biomed.py b/tests/test_capture_biomed.py
+new file mode 100644
+index 0000000..366e0c2
+--- /dev/null
++++ b/tests/test_capture_biomed.py
+@@ -0,0 +1,76 @@
++"""CODEX REPRODUCTION TESTS for the new host capture protocol."""
++from __future__ import annotations
++
++import csv
++import json
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT / "tools"))
++
++from capture_biomed import (  # noqa: E402
++    FULL_COLUMNS,
++    RAW_COLUMNS,
++    SessionWriter,
++    parse_protocol_line,
++)
++
++
++def raw_values(sequence: int = 1) -> list[str]:
++    values = ["0"] * len(RAW_COLUMNS)
++    values[0] = "1"
++    values[1] = "123"
++    values[2] = str(sequence)
++    values[3] = str(sequence * 40_000)
++    values[4] = str(sequence * 40_000 + 100)
++    values[5] = "ESTIMATED_PERIODIC"
++    values[6] = "1"
++    values[7] = "1"
++    values[8] = "10000"
++    values[9] = "20000"
++    return values
++
++
++class TestCaptureProtocol(unittest.TestCase):
++    def test_raw_and_full_schema(self) -> None:
++        kind, record = parse_protocol_line("@VW_RAW," + ",".join(raw_values()) + "\n")
++        self.assertEqual(kind, "sample")
++        self.assertEqual(record["sample_index"], "1")
++        self.assertEqual(record["ir_raw"], "20000")
++        self.assertEqual(record[FULL_COLUMNS[-1]], "")
++
++        full = raw_values(2) + ["0"] * len(FULL_COLUMNS)
++        kind, record = parse_protocol_line("@VW_RAW," + ",".join(full))
++        self.assertEqual(kind, "sample")
++        self.assertEqual(record["sample_index"], "2")
++
++    def test_corrupt_structured_line_is_rejected(self) -> None:
++        with self.assertRaises(ValueError):
++            parse_protocol_line("@VW_RAW,1,too,few")
++        with self.assertRaises(ValueError):
++            parse_protocol_line("@VW_UNKNOWN,1,2")
++
++    def test_session_files_and_sequence_evidence(self) -> None:
++        with tempfile.TemporaryDirectory() as temp:
++            directory = Path(temp) / "session"
++            writer = SessionWriter(directory, {"test": True})
++            writer.consume(b"@VW_META,lab_id,test_lab\n")
++            writer.consume(("@VW_RAW," + ",".join(raw_values(1)) + "\n").encode())
++            writer.consume(("@VW_RAW," + ",".join(raw_values(3)) + "\n").encode())
++            writer.consume(b"@VW_RAW,broken\n")
++            writer.close()
++
++            self.assertEqual((directory / "serial_raw.log").read_bytes().count(b"\n"), 4)
++            with (directory / "samples.csv").open(encoding="utf-8", newline="") as handle:
++                rows = list(csv.DictReader(handle))
++            self.assertEqual([row["sample_index"] for row in rows], ["1", "3"])
++            summary = json.loads((directory / "session_summary.json").read_text(encoding="utf-8"))
++            self.assertEqual(summary["sequence_gaps_observed"], 1)
++            self.assertEqual(summary["corrupt_protocol_lines"], 1)
++
++
++if __name__ == "__main__":
++    unittest.main(verbosity=2)

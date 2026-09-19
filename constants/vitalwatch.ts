@@ -1,15 +1,25 @@
 export type WatchStatus =
   | 'Normal'
+  | 'Sin lectura'
   | 'Alerta'
   | 'SOS'
   | 'Caida detectada'
   | 'Medicacion pendiente';
+
+export const targetFirmwareVersion = 'BIOSYS 1.0.7';
+export const targetSystemVersion = 'SYS 0.9.7';
+export const targetBiomedicalVersion = 'BIO 0.6.3';
 
 export type EventItem = {
   id: string;
   type: string;
   description: string;
   date: string;
+  contactId?: string | null;
+  contactName?: string | null;
+  eventType?: string;
+  remoteId?: number;
+  severity?: string;
 };
 
 export type Medication = {
@@ -36,13 +46,19 @@ export type UserProfile = {
   contactInfo: string;
 };
 
-export type DeviceConnection = {
-  deviceName: string;
-  connectionMode: 'Simulacion' | 'WiFi' | 'Bluetooth' | 'API';
-  endpoint: string;
+export type EmergencyContact = {
+  active: boolean;
+  channel: 'sms' | 'telegram';
+  id: string;
+  name: string;
+  phoneNumber: string | null;
+  telegramChatId: string | null;
+  telegramUsername: string | null;
 };
 
 export type DeviceDisplayView = 'menu' | 'vitals' | 'movement' | 'status' | 'medication';
+
+export type DeviceAlertState = 'none' | 'fall' | 'sos';
 
 export type DeviceDisplayControl = {
   commandAt: string | null;
@@ -61,45 +77,32 @@ export const deviceDisplayViews: { label: string; value: DeviceDisplayView }[] =
   { label: 'Medicacion', value: 'medication' },
 ];
 
-export type VitalTrend = 'sube' | 'baja' | 'estable';
+export type VitalTrend = 'sube' | 'baja' | 'estable' | 'sin datos';
+
+export type ReadingStatus =
+  | 'Simulada'
+  | 'Reciente'
+  | 'Demorada'
+  | 'Sin comunicacion'
+  | 'Sin datos'
+  | 'Sin conexion';
 
 export type VitalSigns = {
-  heartRate: number;
-  oxygen: number;
-  movement: 'Reposo' | 'Leve' | 'Activo' | 'Caida';
+  heartRate: number | null;
+  oxygen: number | null;
+  movement: 'Reposo' | 'Leve' | 'Activo' | 'Caida' | 'Sin datos';
   trend: VitalTrend;
 };
 
 export const initialProfile: UserProfile = {
-  elderName: 'Alicia Gomez',
-  contactName: 'Mariana Gomez',
-  contactInfo: '+54 9 11 5555-1234',
+  elderName: '',
+  contactName: '',
+  contactInfo: '',
 };
 
-export const initialMedications: Medication[] = [
-  {
-    id: 'med-1',
-    name: 'Losartan 50 mg',
-    dose: '1 comprimido',
-    date: currentArgentinaDate(),
-    time: '09:00',
-    status: 'Pendiente',
-  },
-  {
-    id: 'med-2',
-    name: 'Vitamina D',
-    dose: '1 capsula',
-    date: currentArgentinaDate(),
-    time: '13:00',
-    status: 'Pendiente',
-  },
-];
+export const initialEmergencyContacts: EmergencyContact[] = [];
 
-export const initialDeviceConnection: DeviceConnection = {
-  deviceName: 'Pulsera VitalWatch ESP32',
-  connectionMode: 'Simulacion',
-  endpoint: 'http://192.168.4.1/estado',
-};
+export const initialMedications: Medication[] = [];
 
 export const initialDeviceDisplayControl: DeviceDisplayControl = {
   commandAt: null,
@@ -110,20 +113,13 @@ export const initialDeviceDisplayControl: DeviceDisplayControl = {
   reportedView: null,
 };
 
-export const initialHistory: EventItem[] = [
-  {
-    id: 'event-demo-1',
-    type: 'Inicio',
-    description: 'VitalWatch listo para simular eventos de la pulsera.',
-    date: 'Hoy',
-  },
-];
+export const initialHistory: EventItem[] = [];
 
 export const initialVitalSigns: VitalSigns = {
-  heartRate: 76,
-  oxygen: 98,
-  movement: 'Reposo',
-  trend: 'estable',
+  heartRate: null,
+  oxygen: null,
+  movement: 'Sin datos',
+  trend: 'sin datos',
 };
 
 export const statusStyles: Record<
@@ -135,11 +131,17 @@ export const statusStyles: Record<
     description: string;
   }
 > = {
+  'Sin lectura': {
+    color: '#64748B',
+    softColor: '#F1F5F9',
+    text: '#334155',
+    description: 'Faltan lecturas validas. Revisar el sensor y la ultima actualizacion.',
+  },
   Normal: {
     color: '#0E9F6E',
     softColor: '#DCFCE7',
     text: '#064E3B',
-    description: 'La persona esta estable y sin alertas activas.',
+    description: 'Sin alertas activas segun los datos disponibles. Lecturas experimentales.',
   },
   Alerta: {
     color: '#F59E0B',
@@ -157,7 +159,7 @@ export const statusStyles: Record<
     color: '#EA580C',
     softColor: '#FFEDD5',
     text: '#7C2D12',
-    description: 'La pulsera simulo una posible caida.',
+    description: 'Se registro una posible caida. Revisar a la persona.',
   },
   'Medicacion pendiente': {
     color: '#6D28D9',

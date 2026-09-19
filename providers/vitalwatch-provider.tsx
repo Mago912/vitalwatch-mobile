@@ -1,18 +1,22 @@
 import React, { createContext, PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
+import * as Notifications from 'expo-notifications';
+import { AppState } from 'react-native';
 
 import {
-  DeviceConnection,
+  DeviceAlertState,
   DeviceDisplayControl,
   DeviceDisplayView,
   deviceDisplayViews,
+  EmergencyContact,
   EventItem,
-  initialDeviceConnection,
+  initialEmergencyContacts,
   initialDeviceDisplayControl,
   initialHistory,
   initialMedications,
   initialProfile,
   initialVitalSigns,
   Medication,
+  ReadingStatus,
   UserProfile,
   VitalSigns,
   WatchStatus,
@@ -24,11 +28,19 @@ import {
 } from '@/lib/vitalwatch-notifications';
 import { registerDevicePushToken } from '@/lib/vitalwatch-push';
 import {
+  sendRemoteOk,
   setRemoteDisplayEnabled,
   setRemoteDisplayView,
+  waitForRemoteAlertDismissal,
   waitForRemoteDisplayConfirmation,
 } from '@/lib/vitalwatch-device-control';
 import { DashboardEvent, fetchDashboardSnapshot } from '@/lib/vitalwatch-api';
+import {
+  getRemoteReadingStatus,
+  getRemoteStatus,
+  getTrend,
+  readRemoteMeasurements,
+} from '@/lib/vitalwatch-readings';
 import {
   createRemoteMedication,
   deleteRemoteMedication,
@@ -37,23 +49,34 @@ import {
   updateRemoteMedication,
 } from '@/lib/vitalwatch-medications';
 import {
-  loadDeviceConnection,
+  createRemotePhoneContact,
+  deleteRemoteEmergencyContact,
+  fetchRemoteEmergencyContacts,
+  PhoneContactInput,
+  setRemoteContactActive,
+  updateRemotePhoneContact,
+} from '@/lib/vitalwatch-emergency-contacts';
+import {
+  loadEmergencyContacts,
   loadHistory,
   loadMedications,
   loadProfile,
-  saveDeviceConnection,
+  saveEmergencyContacts,
   saveHistory,
   saveMedications,
   saveProfile,
 } from '@/lib/vitalwatch-storage';
+import { supabase } from '@/lib/supabase';
 
 type VitalWatchContextValue = {
-  battery: number;
-  dataSource: 'Simulacion' | 'Supabase';
-  deviceConnection: DeviceConnection;
+  battery: number | null;
+  backendReachable: boolean;
   displayControl: DeviceDisplayControl;
   displayControlMessage: string;
+  emergencyContacts: EmergencyContact[];
+  emergencyContactSyncMessage: string;
   history: EventItem[];
+  isContactSyncing: boolean;
   isSyncing: boolean;
   isMedicationSyncing: boolean;
   isDisplayControlSyncing: boolean;
@@ -64,30 +87,35 @@ type VitalWatchContextValue = {
   profile: UserProfile;
   pushNotificationMessage: string;
   pushNotificationStatus: 'Pendientes' | 'Registrando' | 'Activas' | 'Error';
+  readingStatus: ReadingStatus;
   status: WatchStatus;
   syncError: string | null;
   vitals: VitalSigns;
-  activateFall: () => void;
-  activateLowBattery: () => void;
-  activateMedicationReminder: () => void;
-  activateNormal: () => void;
-  activateSos: () => void;
   addMedication: (medication: Omit<Medication, 'id' | 'status'>) => Promise<boolean>;
+  addPhoneContact: (contact: PhoneContactInput) => Promise<boolean>;
+  deleteEmergencyContact: (id: string) => Promise<boolean>;
   deleteMedication: (id: string) => Promise<boolean>;
+  dismissImpactAlert: () => Promise<boolean>;
   markMedicationTaken: (id: string) => Promise<boolean>;
   markMedicationPending: (id: string) => Promise<boolean>;
   refreshMedications: () => Promise<boolean>;
+  refreshEmergencyContacts: (force?: boolean) => Promise<boolean>;
   refreshRemoteData: () => Promise<void>;
   retryPushNotifications: () => Promise<void>;
   setDisplayEnabled: (enabled: boolean) => Promise<boolean>;
   setDisplayView: (view: DeviceDisplayView) => Promise<boolean>;
-  updateDeviceConnection: (deviceConnection: DeviceConnection) => void;
+  setEmergencyContactActive: (id: string, active: boolean) => Promise<boolean>;
+  updatePhoneContact: (id: string, contact: PhoneContactInput) => Promise<boolean>;
   updateMedication: (medication: Medication) => Promise<boolean>;
   updateProfile: (profile: UserProfile) => void;
 };
 
 const VitalWatchContext = createContext<VitalWatchContextValue | null>(null);
-const REMOTE_REFRESH_MS = 15000;
+// El backend se consulta cada 5 s para que la pantalla principal no quede
+// atrasada respecto de la fotografia PPG enviada por BIOSYS.
+const REMOTE_REFRESH_MS = 5000;
+const MEDICATION_REFRESH_MS = 30_000;
+const EMERGENCY_CONTACT_REFRESH_MS = 15_000;
 
 function getDisplayViewLabel(view: DeviceDisplayView) {
   return deviceDisplayViews.find((option) => option.value === view)?.label ?? view;
@@ -113,43 +141,37 @@ function formatRemoteDateTime(value: string) {
   });
 }
 
-function getRemoteStatus(events: DashboardEvent[], heartRate: number, oxygen: number): WatchStatus {
-  const latestEvent = events[0]?.type;
+function getEffectiveAlertState(
+  events: DashboardEvent[],
+  reportedState: DeviceAlertState | null,
+  reportedAt: string | null
+): DeviceAlertState | null {
+  const latestCriticalEvent = events.find(
+    (event) => event.type === 'fall_detected' || event.type === 'sos'
+  );
 
-  if (latestEvent === 'sos') {
-    return 'SOS';
+  if (
+    latestCriticalEvent &&
+    (!reportedAt || new Date(latestCriticalEvent.eventTime).getTime() > new Date(reportedAt).getTime())
+  ) {
+    return latestCriticalEvent.type === 'fall_detected' ? 'fall' : 'sos';
   }
 
-  if (latestEvent === 'fall_detected') {
-    return 'Caida detectada';
-  }
-
-  if (latestEvent === 'battery_low' || latestEvent === 'heart_rate_high' || latestEvent === 'spo2_low') {
-    return 'Alerta';
-  }
-
-  if (latestEvent === 'medication_pending') {
-    return 'Medicacion pendiente';
-  }
-
-  if (heartRate >= 110 || oxygen <= 92) {
-    return 'SOS';
-  }
-
-  if (heartRate >= 100 || oxygen <= 94) {
-    return 'Alerta';
-  }
-
-  return 'Normal';
+  return reportedState;
 }
 
 function getRemoteEventLabel(type: string) {
   const labels: Record<string, string> = {
     battery_low: 'Bateria baja',
+    call_request: 'LLAMADA',
+    device_offline: 'Sin comunicacion',
+    device_online: 'Comunicacion restablecida',
     fall_detected: 'Caida detectada',
+    heart_rate_abnormal: 'Frecuencia cardiaca fuera del rango',
     heart_rate_high: 'Ritmo cardiaco alto',
     medication_pending: 'Medicacion pendiente',
     medication_taken: 'Medicacion tomada',
+    message_request: 'MENSAJE',
     normal_status: 'Estado normal',
     performance_mode_enabled: 'Modo rendimiento activado',
     sos: 'SOS activado',
@@ -168,81 +190,56 @@ function createEvent(type: string, description: string): EventItem {
   };
 }
 
-function randomBetween(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function getTrend(previousHeartRate: number, nextHeartRate: number) {
-  const difference = nextHeartRate - previousHeartRate;
-
-  if (difference >= 2) {
-    return 'sube' as const;
-  }
-
-  if (difference <= -2) {
-    return 'baja' as const;
-  }
-
-  return 'estable' as const;
-}
-
-function simulateVitalSigns(status: WatchStatus, previousVitals: VitalSigns): VitalSigns {
-  let nextVitals: Omit<VitalSigns, 'trend'>;
-
-  if (status === 'SOS') {
-    nextVitals = {
-      heartRate: randomBetween(105, 122),
-      oxygen: randomBetween(92, 95),
-      movement: 'Activo',
-    };
-  } else if (status === 'Caida detectada') {
-    nextVitals = {
-      heartRate: randomBetween(92, 112),
-      oxygen: randomBetween(93, 97),
-      movement: 'Caida',
-    };
-  } else if (status === 'Alerta') {
-    nextVitals = {
-      heartRate: randomBetween(82, 98),
-      oxygen: randomBetween(94, 98),
-      movement: 'Leve',
-    };
-  } else {
-    nextVitals = {
-      heartRate: randomBetween(68, 84),
-      oxygen: randomBetween(96, 99),
-      movement: Math.random() > 0.78 ? 'Leve' : 'Reposo',
-    };
-  }
-
+function normalizeSavedContact(contact: EmergencyContact): EmergencyContact {
+  const legacy = contact as EmergencyContact & { phone?: string };
   return {
-    ...nextVitals,
-    trend: getTrend(previousVitals.heartRate, nextVitals.heartRate),
+    active: contact.active ?? true,
+    channel: contact.channel ?? (contact.telegramChatId ? 'telegram' : 'sms'),
+    id: contact.id,
+    name: contact.name,
+    phoneNumber: contact.phoneNumber ?? legacy.phone ?? null,
+    telegramChatId: contact.telegramChatId ?? null,
+    telegramUsername: contact.telegramUsername ?? null,
   };
 }
 
 export function VitalWatchProvider({ children }: PropsWithChildren) {
   const latestRemoteEventId = useRef<number | null>(null);
+  const emergencyContactsRef = useRef<EmergencyContact[]>(initialEmergencyContacts);
+  const emergencyContactSyncInProgress = useRef(false);
+  const lastEmergencyContactRefreshAt = useRef(0);
+  const remoteContactsLoadedForUser = useRef<number | null>(null);
+  const lastMedicationRefreshAt = useRef(0);
   const notificationPermissionRef = useRef(false);
   const registeredPushDeviceCode = useRef<string | null>(null);
   const remoteDeviceCode = useRef<string | null>(null);
   const remoteDeviceId = useRef<number | null>(null);
+  const remoteUserId = useRef<number | null>(null);
   const remotePushIsActive = useRef(false);
   const pushRegistrationInProgress = useRef(false);
-  const [battery, setBattery] = useState(86);
-  const [dataSource, setDataSource] = useState<'Simulacion' | 'Supabase'>('Simulacion');
-  const [deviceConnection, setDeviceConnection] = useState<DeviceConnection>(initialDeviceConnection);
+  const remoteRefreshInProgress = useRef(false);
+  const [battery, setBattery] = useState<number | null>(null);
+  const [backendReachable, setBackendReachable] = useState(false);
   const [displayControl, setDisplayControl] = useState<DeviceDisplayControl>(
     initialDeviceDisplayControl
   );
   const [displayControlMessage, setDisplayControlMessage] = useState(
     'Esperando la primera confirmacion del ESP32.'
   );
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>(
+    initialEmergencyContacts
+  );
+  const [emergencyContactSyncMessage, setEmergencyContactSyncMessage] = useState(
+    'Los contactos se guardan localmente hasta vincular la cuenta.'
+  );
   const [history, setHistory] = useState<EventItem[]>(initialHistory);
+  const [isContactSyncing, setIsContactSyncing] = useState(false);
   const [isMedicationSyncing, setIsMedicationSyncing] = useState(false);
   const [isDisplayControlSyncing, setIsDisplayControlSyncing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(formatDateTime());
+  const [linkedDeviceId, setLinkedDeviceId] = useState<number | null>(null);
+  const [linkedUserId, setLinkedUserId] = useState<number | null>(null);
   const [medications, setMedications] = useState<Medication[]>(initialMedications);
   const [medicationSyncMessage, setMedicationSyncMessage] = useState(
     'Mostrando los medicamentos guardados en este celular.'
@@ -254,23 +251,34 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
   );
   const [pushNotificationStatus, setPushNotificationStatus] =
     useState<VitalWatchContextValue['pushNotificationStatus']>('Pendientes');
-  const [status, setStatus] = useState<WatchStatus>('Normal');
+  const [readingStatus, setReadingStatus] = useState<ReadingStatus>('Sin datos');
+  const [status, setStatus] = useState<WatchStatus>('Sin lectura');
   const [syncError, setSyncError] = useState<string | null>(null);
   const [vitals, setVitals] = useState<VitalSigns>(initialVitalSigns);
 
   useEffect(() => {
     async function prepareApp() {
-      const [savedProfile, savedMedications, savedHistory, savedDeviceConnection] = await Promise.all([
+      const [
+        savedProfile,
+        savedMedications,
+        savedHistory,
+        savedEmergencyContacts,
+      ] = await Promise.all([
         loadProfile(initialProfile),
         loadMedications(initialMedications),
         loadHistory(initialHistory),
-        loadDeviceConnection(initialDeviceConnection),
+        loadEmergencyContacts(initialEmergencyContacts),
       ]);
 
       setProfile(savedProfile);
       setMedications(savedMedications);
       setHistory(savedHistory);
-      setDeviceConnection(savedDeviceConnection);
+      // VW-APP-02 — Se preservan tanto telefonos administrados por VitalWatch
+      // como chats de Telegram; ya no se descartan contactos telefonicos.
+      const migratedEmergencyContacts = savedEmergencyContacts.map(normalizeSavedContact);
+      setEmergencyContacts(migratedEmergencyContacts);
+      emergencyContactsRef.current = migratedEmergencyContacts;
+      void saveEmergencyContacts(migratedEmergencyContacts);
 
       try {
         const permissionWasGranted = await requestNotificationPermissions();
@@ -280,7 +288,7 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
         if (!permissionWasGranted) {
           setPushNotificationStatus('Error');
           setPushNotificationMessage(
-            'El permiso esta desactivado. Usa Abrir permisos de Android para habilitarlo.'
+            'El permiso esta desactivado. Usa Abrir permisos del sistema para habilitarlo.'
           );
         }
       } catch (error) {
@@ -307,20 +315,121 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
-    if (dataSource === 'Supabase') {
-      return undefined;
-    }
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void refreshRemoteData();
+        void refreshMedications(undefined, true, false);
+        if (remoteUserId.current) {
+          void refreshEmergencyContactsForUser(remoteUserId.current, true);
+        }
+      }
+    });
+    const notificationSubscription = Notifications.addNotificationReceivedListener(() => {
+      void refreshRemoteData();
+      void refreshMedications(undefined, true, false);
+    });
 
-    const intervalId = setInterval(() => {
-      // Esta simulacion reemplaza por ahora a los sensores reales del ESP32.
-      setVitals((currentVitals) => simulateVitalSigns(status, currentVitals));
-      setLastUpdated(formatDateTime());
-    }, 3500);
+    return () => {
+      appStateSubscription.remove();
+      notificationSubscription.remove();
+    };
+  }, []);
 
-    return () => clearInterval(intervalId);
-  }, [dataSource, status]);
+  useEffect(() => {
+    if (!linkedDeviceId || !linkedUserId) return;
+
+    let remoteRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let medicationRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let contactRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const queueRemoteRefresh = () => {
+      if (remoteRefreshTimer) clearTimeout(remoteRefreshTimer);
+      remoteRefreshTimer = setTimeout(() => {
+        void refreshRemoteData();
+      }, 200);
+    };
+    const queueMedicationRefresh = () => {
+      if (medicationRefreshTimer) clearTimeout(medicationRefreshTimer);
+      medicationRefreshTimer = setTimeout(() => {
+        void refreshMedications(undefined, true, false);
+      }, 200);
+    };
+    const queueContactRefresh = () => {
+      if (contactRefreshTimer) clearTimeout(contactRefreshTimer);
+      contactRefreshTimer = setTimeout(() => {
+        void refreshEmergencyContactsForUser(linkedUserId, true);
+      }, 200);
+    };
+
+    const channel = supabase
+      .channel(`vitalwatch-live-${linkedDeviceId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'devices', filter: `id=eq.${linkedDeviceId}` },
+        queueRemoteRefresh
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'sensor_readings',
+          filter: `device_id=eq.${linkedDeviceId}`,
+        },
+        queueRemoteRefresh
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'device_events',
+          filter: `device_id=eq.${linkedDeviceId}`,
+        },
+        queueRemoteRefresh
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'medication_logs',
+          filter: `device_id=eq.${linkedDeviceId}`,
+        },
+        queueMedicationRefresh
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'medications',
+          filter: `user_id=eq.${linkedUserId}`,
+        },
+        queueMedicationRefresh
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'emergency_contacts',
+          filter: `user_id=eq.${linkedUserId}`,
+        },
+        queueContactRefresh
+      )
+      .subscribe();
+
+    return () => {
+      if (remoteRefreshTimer) clearTimeout(remoteRefreshTimer);
+      if (medicationRefreshTimer) clearTimeout(medicationRefreshTimer);
+      if (contactRefreshTimer) clearTimeout(contactRefreshTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [linkedDeviceId, linkedUserId]);
 
   async function refreshRemoteData() {
+    if (remoteRefreshInProgress.current) return;
+    remoteRefreshInProgress.current = true;
     setIsSyncing(true);
 
     try {
@@ -334,7 +443,10 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
           latestRemoteEvent.type !== 'normal_status' &&
           !remotePushIsActive.current
         ) {
-          void showLocalNotification('Alerta VitalWatch', latestRemoteEvent.message);
+          void showLocalNotification('VitalWatch', latestRemoteEvent.message, {
+            id: latestRemoteEvent.id,
+            type: latestRemoteEvent.type,
+          });
         }
 
         latestRemoteEventId.current = latestRemoteEvent.id;
@@ -345,14 +457,11 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
         contactName: snapshot.user.contactName,
         contactInfo: '',
       };
-      const remoteConnection: DeviceConnection = {
-        deviceName: `${snapshot.device.name} (${snapshot.device.code})`,
-        connectionMode: 'API',
-        endpoint: 'Supabase',
-      };
-
       remoteDeviceCode.current = snapshot.device.code;
       remoteDeviceId.current = snapshot.device.id;
+      remoteUserId.current = snapshot.user.id;
+      setLinkedDeviceId(snapshot.device.id);
+      setLinkedUserId(snapshot.user.id);
       const remoteDisplayControl: DeviceDisplayControl = {
         commandAt: snapshot.device.displayCommandAt,
         desiredOn: snapshot.device.desiredDisplayOn,
@@ -375,19 +484,25 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
       } else {
         setDisplayControlMessage('Pantalla encendida. Esperando el cambio de vista.');
       }
-      await registerRemotePushNotifications(snapshot.device.code);
-      await refreshMedications(snapshot.device.code);
       const remoteEvents: EventItem[] = snapshot.events.map((event) => ({
+        contactId: event.contactId === null ? null : String(event.contactId),
+        contactName:
+          event.contactId === null
+            ? null
+            : emergencyContactsRef.current.find(
+                (contact) => contact.id === String(event.contactId)
+              )?.name ?? null,
         id: `supabase-${event.id}`,
         type: getRemoteEventLabel(event.type),
         description: event.message,
         date: formatRemoteDateTime(event.eventTime),
+        eventType: event.type,
+        remoteId: event.id,
+        severity: event.severity,
       }));
 
       setProfile(remoteProfile);
-      setDeviceConnection(remoteConnection);
       saveProfile(remoteProfile);
-      saveDeviceConnection(remoteConnection);
 
       if (remoteEvents.length > 0) {
         setHistory((currentHistory) => {
@@ -401,39 +516,40 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
       }
 
       const remoteReading = snapshot.latestReading;
+      const activeAlert = getEffectiveAlertState(
+        snapshot.events,
+        snapshot.device.reportedAlertState,
+        snapshot.device.alertReportedAt
+      );
 
-      if (remoteReading) {
-        const heartRate = remoteReading.heartRate ?? initialVitalSigns.heartRate;
-        const oxygen = remoteReading.oxygen ?? initialVitalSigns.oxygen;
+      const nextReadingStatus = getRemoteReadingStatus(remoteReading?.recordedAt ?? null);
+      const measurements = readRemoteMeasurements(
+        nextReadingStatus === 'Reciente' ? remoteReading : null
+      );
+      setStatus(getRemoteStatus(snapshot.events, measurements.heartRate, measurements.oxygen, activeAlert));
+      setVitals((currentVitals) => ({
+        heartRate: measurements.heartRate,
+        oxygen: measurements.oxygen,
+        // El contrato actual informa impactos, no una clasificacion continua del movimiento.
+        movement: activeAlert === 'fall' ? 'Caida' : 'Sin datos',
+        trend: getTrend(currentVitals.heartRate, measurements.heartRate),
+      }));
+      setLastUpdated(remoteReading ? formatRemoteDateTime(remoteReading.recordedAt) : 'Sin lecturas recibidas');
+      setBattery(measurements.battery);
 
-        setStatus(getRemoteStatus(snapshot.events, heartRate, oxygen));
-        setVitals((currentVitals) => {
-          return {
-            ...currentVitals,
-            heartRate,
-            oxygen,
-            movement:
-              snapshot.events[0]?.type === 'fall_detected' || (remoteReading.impact ?? 0) >= 2.5
-                ? 'Caida'
-                : 'Reposo',
-            trend: getTrend(currentVitals.heartRate, heartRate),
-          };
-        });
-        setLastUpdated(formatRemoteDateTime(remoteReading.recordedAt));
-      }
-
-      const remoteBattery = remoteReading?.battery ?? snapshot.device.battery;
-
-      if (remoteBattery !== null) {
-        setBattery(Math.max(0, Math.min(100, remoteBattery)));
-      }
-
-      setDataSource('Supabase');
+      setBackendReachable(true);
+      setReadingStatus(nextReadingStatus);
       setSyncError(null);
+      void registerRemotePushNotifications(snapshot.device.code);
+      void refreshMedications(snapshot.device.code, false, false);
+      void refreshEmergencyContactsForUser(snapshot.user.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error desconocido al consultar Supabase.';
+      setBackendReachable(false);
+      setReadingStatus('Sin conexion');
       setSyncError(message);
     } finally {
+      remoteRefreshInProgress.current = false;
       setIsSyncing(false);
     }
   }
@@ -609,6 +725,46 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
     }
   }
 
+  async function dismissImpactAlert() {
+    const deviceId = remoteDeviceId.current;
+    if (!deviceId) {
+      setDisplayControlMessage('Todavia no se pudo identificar la pulsera vinculada.');
+      return false;
+    }
+
+    setIsDisplayControlSyncing(true);
+    setDisplayControlMessage('Enviando OK para cerrar la alerta en la pulsera...');
+
+    try {
+      const commandAt = await sendRemoteOk(deviceId);
+      const wasDismissed = await waitForRemoteAlertDismissal(deviceId, commandAt);
+
+      if (!wasDismissed) {
+        setDisplayControlMessage(
+          'OK enviado, pero BIOSYS todavia no confirmo el cierre de la alerta.'
+        );
+        return false;
+      }
+
+      setStatus('Normal');
+      setVitals((currentVitals) => ({ ...currentVitals, movement: 'Reposo' }));
+      setDisplayControlMessage('BIOSYS confirmo que la alerta de impacto fue cerrada.');
+      addHistoryEvent(
+        'Alerta cerrada',
+        'La alerta de posible impacto se cerro con OK desde la aplicacion.'
+      );
+      await refreshRemoteData();
+      return true;
+    } catch (error) {
+      setDisplayControlMessage(
+        error instanceof Error ? error.message : 'No se pudo cerrar la alerta remota.'
+      );
+      return false;
+    } finally {
+      setIsDisplayControlSyncing(false);
+    }
+  }
+
   function addHistoryEvent(type: string, description: string) {
     const newEvent = createEvent(type, description);
 
@@ -621,57 +777,27 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
     setLastUpdated(newEvent.date);
   }
 
-  function activateStatus(nextStatus: WatchStatus, eventType: string, description: string, batteryValue?: number) {
-    setStatus(nextStatus);
-
-    if (batteryValue !== undefined) {
-      setBattery(batteryValue);
-    }
-
-    addHistoryEvent(eventType, description);
-  }
-
-  function activateNormal() {
-    activateStatus('Normal', 'Estado normal', 'Estado normal restaurado.', 86);
-    showLocalNotification('VitalWatch', 'Estado normal restaurado.');
-  }
-
-  function activateFall() {
-    activateStatus('Caida detectada', 'Caida detectada', 'Posible caida detectada por la pulsera.');
-    showLocalNotification('Alerta VitalWatch', 'Posible caida detectada.');
-  }
-
-  function activateSos() {
-    activateStatus('SOS', 'SOS activado', 'SOS activado: revisar al usuario inmediatamente.');
-    showLocalNotification('SOS activado', 'Revisar al usuario inmediatamente.');
-  }
-
-  function activateLowBattery() {
-    activateStatus('Alerta', 'Bateria baja', 'Bateria baja en la pulsera.', 12);
-    showLocalNotification('Bateria baja', 'La pulsera VitalWatch tiene bateria baja.');
-  }
-
-  function activateMedicationReminder() {
-    activateStatus(
-      'Medicacion pendiente',
-      'Recordatorio de medicacion',
-      'Recordatorio de medicacion enviado.'
-    );
-    showLocalNotification('Recordatorio de medicacion', 'Hay una medicacion pendiente.');
-  }
-
-  async function refreshMedications(deviceCode = remoteDeviceCode.current) {
+  async function refreshMedications(
+    deviceCode = remoteDeviceCode.current,
+    force = true,
+    showLoading = true
+  ) {
     if (!deviceCode) {
       setMedicationSyncMessage('Esperando el codigo de la pulsera para sincronizar.');
       return false;
     }
 
-    setIsMedicationSyncing(true);
+    if (!force && Date.now() - lastMedicationRefreshAt.current < MEDICATION_REFRESH_MS) {
+      return true;
+    }
+
+    if (showLoading) setIsMedicationSyncing(true);
 
     try {
       const remoteMedications = await fetchRemoteMedications(deviceCode);
       setMedications(remoteMedications);
       await saveMedications(remoteMedications);
+      lastMedicationRefreshAt.current = Date.now();
       setMedicationSyncMessage('Medicamentos sincronizados con la pulsera.');
       return true;
     } catch (error) {
@@ -682,7 +808,7 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
       );
       return false;
     } finally {
-      setIsMedicationSyncing(false);
+      if (showLoading) setIsMedicationSyncing(false);
     }
   }
 
@@ -762,23 +888,121 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
   function updateProfile(nextProfile: UserProfile) {
     setProfile(nextProfile);
     saveProfile(nextProfile);
-    addHistoryEvent('Configuracion', 'Datos de usuario/contacto actualizados.');
+    addHistoryEvent('Configuracion', 'Datos del usuario actualizados.');
   }
 
-  function updateDeviceConnection(nextDeviceConnection: DeviceConnection) {
-    setDeviceConnection(nextDeviceConnection);
-    saveDeviceConnection(nextDeviceConnection);
-    addHistoryEvent('ESP32', 'Configuracion de conexion futura actualizada.');
+  async function refreshEmergencyContactsForUser(userId: number, force = false) {
+    if (emergencyContactSyncInProgress.current) return false;
+    if (
+      !force &&
+      remoteContactsLoadedForUser.current === userId &&
+      Date.now() - lastEmergencyContactRefreshAt.current < EMERGENCY_CONTACT_REFRESH_MS
+    ) {
+      return true;
+    }
+
+    emergencyContactSyncInProgress.current = true;
+    setIsContactSyncing(true);
+    try {
+      const remoteContacts = await fetchRemoteEmergencyContacts(userId);
+      emergencyContactsRef.current = remoteContacts;
+      setEmergencyContacts(remoteContacts);
+      await saveEmergencyContacts(remoteContacts);
+      remoteContactsLoadedForUser.current = userId;
+      lastEmergencyContactRefreshAt.current = Date.now();
+      setEmergencyContactSyncMessage('Contactos y chats de Telegram sincronizados.');
+      return true;
+    } catch (error) {
+      setEmergencyContactSyncMessage(
+        `Se usan los contactos guardados en este celular. ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return false;
+    } finally {
+      emergencyContactSyncInProgress.current = false;
+      setIsContactSyncing(false);
+    }
+  }
+
+  async function refreshEmergencyContacts(force = true) {
+    const userId = remoteUserId.current;
+    if (!userId) {
+      setEmergencyContactSyncMessage('Esperando la cuenta vinculada para sincronizar.');
+      return false;
+    }
+    return refreshEmergencyContactsForUser(userId, force);
+  }
+
+  async function runContactMutation(
+    action: (userId: number) => Promise<EmergencyContact[]>,
+    successMessage: string
+  ) {
+    const userId = remoteUserId.current;
+    if (!userId) {
+      setEmergencyContactSyncMessage('Todavia no se identifico la cuenta VitalWatch.');
+      return false;
+    }
+
+    setIsContactSyncing(true);
+    setEmergencyContactSyncMessage('Cambio pendiente: sincronizando con Supabase...');
+    try {
+      const remoteContacts = await action(userId);
+      emergencyContactsRef.current = remoteContacts;
+      setEmergencyContacts(remoteContacts);
+      await saveEmergencyContacts(remoteContacts);
+      remoteContactsLoadedForUser.current = userId;
+      lastEmergencyContactRefreshAt.current = Date.now();
+      setEmergencyContactSyncMessage(successMessage);
+      return true;
+    } catch (error) {
+      setEmergencyContactSyncMessage(
+        `Error de sincronizacion: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return false;
+    } finally {
+      setIsContactSyncing(false);
+    }
+  }
+
+  function addPhoneContact(contact: PhoneContactInput) {
+    return runContactMutation(
+      (userId) => createRemotePhoneContact(userId, contact),
+      'Contacto guardado y disponible para sincronizar con la pulsera.'
+    );
+  }
+
+  function updatePhoneContact(id: string, contact: PhoneContactInput) {
+    return runContactMutation(
+      (userId) => updateRemotePhoneContact(userId, id, contact),
+      'Contacto actualizado en Supabase y en la agenda de la pulsera.'
+    );
+  }
+
+  function setEmergencyContactActive(id: string, active: boolean) {
+    return runContactMutation(
+      (userId) => setRemoteContactActive(userId, id, active),
+      active ? 'Contacto activado para la pulsera.' : 'Contacto desactivado.'
+    );
+  }
+
+  function deleteEmergencyContact(id: string) {
+    return runContactMutation(
+      (userId) => deleteRemoteEmergencyContact(userId, id),
+      'Contacto eliminado de VitalWatch.'
+    );
   }
 
   const value = useMemo(
     () => ({
       battery,
-      dataSource,
-      deviceConnection,
+      backendReachable,
       displayControl,
       displayControlMessage,
+      emergencyContacts,
+      emergencyContactSyncMessage,
       history,
+      isContactSyncing,
       isMedicationSyncing,
       isDisplayControlSyncing,
       isSyncing,
@@ -789,34 +1013,37 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
       profile,
       pushNotificationMessage,
       pushNotificationStatus,
+      readingStatus,
       status,
       syncError,
       vitals,
-      activateFall,
-      activateLowBattery,
-      activateMedicationReminder,
-      activateNormal,
-      activateSos,
       addMedication,
+      addPhoneContact,
+      deleteEmergencyContact,
       deleteMedication,
+      dismissImpactAlert,
       markMedicationTaken,
       markMedicationPending,
+      refreshEmergencyContacts,
       refreshMedications,
       refreshRemoteData,
       retryPushNotifications,
+      setEmergencyContactActive,
       setDisplayEnabled,
       setDisplayView,
-      updateDeviceConnection,
       updateMedication,
+      updatePhoneContact,
       updateProfile,
     }),
     [
       battery,
-      dataSource,
-      deviceConnection,
+      backendReachable,
       displayControl,
       displayControlMessage,
+      emergencyContacts,
+      emergencyContactSyncMessage,
       history,
+      isContactSyncing,
       isMedicationSyncing,
       isDisplayControlSyncing,
       isSyncing,
@@ -827,6 +1054,7 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
       profile,
       pushNotificationMessage,
       pushNotificationStatus,
+      readingStatus,
       status,
       syncError,
       vitals,

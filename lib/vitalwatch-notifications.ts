@@ -36,12 +36,28 @@ export async function requestNotificationPermissions() {
   return requestedPermission.status === 'granted';
 }
 
-export async function showLocalNotification(title: string, body: string) {
+export async function showLocalNotification(
+  _title: string,
+  _body: string,
+  event?: { id: number; type: string }
+) {
   try {
+    const isMessage = event?.type === 'message_request';
     await Notifications.scheduleNotificationAsync({
       content: {
-        title,
-        body,
+        // VW-NOTIF-01 — La pantalla bloqueada no recibe nombres, telefonos,
+        // mediciones ni el texto completo guardado por Supabase.
+        title: 'VitalWatch',
+        body: isMessage
+          ? 'Tenes un nuevo mensaje.'
+          : 'Hay una nueva alerta. Toca para verla.',
+        data: event
+          ? {
+              event_id: event.id,
+              event_type: event.type,
+              url: `/event/${event.id}`,
+            }
+          : undefined,
       },
       trigger: null,
     });

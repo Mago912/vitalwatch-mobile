@@ -2,11 +2,12 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $sourceConfigs = @(
+  (Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_0\vitalwatch_config.h'),
   (Join-Path $projectRoot 'esp32\VitalWatch_FW_0_8_0\vitalwatch_config.h'),
   (Join-Path $projectRoot 'esp32\VitalWatch_FW_0_7_0\vitalwatch_config.h')
 )
-$targetConfig = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_0\vitalwatch_config.h'
-$exampleConfig = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_0\vitalwatch_config.example.h'
+$targetConfig = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_1\vitalwatch_config.h'
+$exampleConfig = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_1\vitalwatch_config.example.h'
 $setupScript = Join-Path $PSScriptRoot 'esp32-setup.ps1'
 $firmwareScript = Join-Path $PSScriptRoot 'esp32-firmware.ps1'
 $migrationDirectory = Join-Path $projectRoot 'supabase\migrations'
@@ -57,28 +58,28 @@ if (-not (Test-Path -LiteralPath $targetConfig)) {
   if ($sourceConfig) {
     Copy-Item -LiteralPath $sourceConfig -Destination $targetConfig
     $sourceVersion = Split-Path -Leaf (Split-Path -Parent $sourceConfig)
-    Write-Host "Configuracion privada migrada de $sourceVersion a 0.9.0."
+    Write-Host "Configuracion privada migrada de $sourceVersion a 0.9.1."
   } elseif (Test-Path -LiteralPath $exampleConfig) {
     Copy-Item -LiteralPath $exampleConfig -Destination $targetConfig
     Write-Warning (
-      'No se encontro la configuracion de 0.8.0 ni 0.7.0. Se creo una plantilla; ' +
+      'No se encontro la configuracion de 0.9.0, 0.8.0 ni 0.7.0. Se creo una plantilla; ' +
       'completa Supabase y DEVICE_TOKEN antes de cargar la placa.'
     )
   } else {
-    throw 'No se encontro vitalwatch_config.example.h para firmware 0.9.0.'
+    throw 'No se encontro vitalwatch_config.example.h para firmware 0.9.1.'
   }
 } else {
-  Write-Host 'Se conserva vitalwatch_config.h existente de firmware 0.9.0.'
+  Write-Host 'Se conserva vitalwatch_config.h existente de firmware 0.9.1.'
 }
 
 Write-Host 'Preparando Arduino CLI y rutas para esta computadora...'
 Invoke-VitalWatchScript -Script $setupScript
 
-Write-Host 'Compilando VitalWatch FW 0.9.0...'
+Write-Host 'Compilando VitalWatch FW 0.9.1...'
 Invoke-VitalWatchScript -Script $firmwareScript -Arguments @('-Action', 'build')
 
 Write-Host ''
-Write-Host 'VitalWatch FW 0.9.0 esta preparado en esta computadora.' -ForegroundColor Green
+Write-Host 'VitalWatch FW 0.9.1 esta preparado en esta computadora.' -ForegroundColor Green
 Write-Host 'Conecta el ESP32 y ejecuta:'
 Write-Host '  npm run firmware:ports'
 Write-Host '  npm run firmware:upload'

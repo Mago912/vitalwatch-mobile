@@ -73,6 +73,7 @@ const scenarios = [
   normalScenario(77, true),
   alertScenario({
     label: 'Posible caida',
+    alertState: 'fall',
     heartRate: [96, 110],
     oxygen: [93, 96],
     impact: [3.2, 4.2],
@@ -85,6 +86,7 @@ const scenarios = [
   }),
   alertScenario({
     label: 'Posible caida',
+    alertState: 'fall',
     heartRate: [96, 110],
     oxygen: [93, 96],
     impact: [3.2, 4.2],
@@ -179,9 +181,11 @@ async function saveScenario(scenario) {
   const { error: deviceError } = await supabase
     .from('devices')
     .update({
+      alert_reported_at: recordedAt,
       current_battery: scenario.battery,
       performance_mode: scenario.performanceMode,
       last_seen_at: recordedAt,
+      reported_alert_state: scenario.alertState,
     })
     .eq('id', deviceId);
 
@@ -221,6 +225,7 @@ function normalScenario(battery, registerRecovery = false) {
     impact: [0.05, 0.35],
     battery,
     performanceMode: false,
+    alertState: 'none',
     event: registerRecovery
       ? {
           type: 'normal_status',
@@ -233,6 +238,7 @@ function normalScenario(battery, registerRecovery = false) {
 
 function alertScenario(scenario) {
   return {
+    alertState: 'none',
     performanceMode: false,
     event: null,
     ...scenario,

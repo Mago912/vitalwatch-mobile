@@ -18,6 +18,7 @@ const MAPPING = {
   'heart.fill': 'favorite',
   'chart.line.uptrend.xyaxis': 'show-chart',
   'pills.fill': 'medication',
+  applewatch: 'watch',
   'gearshape.fill': 'settings',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
