@@ -36,6 +36,7 @@ yarn-error.*
 .env*.local
 esp32/**/vitalwatch_config.h
 /Laboratorio_Pruebas_MAX30102_2026-09-17/**/vitalwatch_config.h
+/Laboratorio_Pruebas_MAX30102_2026-09-17/**/build/
 esp32/**/build/
 .codex-remote-attachments/
 PAIRING_CODE.local.txt
