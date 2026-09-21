@@ -103,7 +103,7 @@ pantalla solicitada como apagada, la orden de energía puede volver a apagarla.
 
 ## Compatibilidad con la app
 
-La app 1.0.10 y las Edge Functions comparten el estado `Pendiente/Tomado`. Cuando
+La app 1.0.11 y las Edge Functions comparten el estado `Pendiente/Tomado`. Cuando
 Supabase informa `reminderDue`, la TFT abre la medicacion correspondiente y
 muestra `HORA DE TOMAR`. La app mantiene la telemetria cada 5 segundos sin
 bloquear el formulario de creacion de medicamentos.

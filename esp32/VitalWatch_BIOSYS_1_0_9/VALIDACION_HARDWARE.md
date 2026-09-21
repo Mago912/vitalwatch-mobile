@@ -1,8 +1,8 @@
-# Validacion fisica - BIOSYS 1.0.5
+# Validacion fisica - BIOSYS 1.0.9
 
 ## 1. Preparación y retroceso
 
-- Conservar BIOSYS 1.0.1 y su binario/ZIP como retorno seguro.
+- Conservar el ultimo firmware fisicamente verificado y su binario/ZIP como retorno seguro.
 - Confirmar cable USB de datos, alimentación estable y puerto COM real.
 - Verificar localmente `vitalwatch_config.h` sin copiar ni mostrar sus valores.
 - Compilar primero con `npm run firmware:biosys:build`.
@@ -13,7 +13,7 @@
 Después de cargar, abrir Serial a 115200 y comprobar:
 
 ```text
-[PENDIENTE] VitalWatch VW-BIOSYS 1.0.5 | incluye VW-SYS 0.9.5 + VW-BIO 0.6.3
+[READY] VitalWatch VW-BIOSYS 1.0.9 | incluye VW-SYS 0.9.9 + VW-BIO 0.6.3
 ```
 
 La vista Estado debe presentar las mismas tres versiones y marcar IMU/MAX30102
@@ -88,7 +88,7 @@ umbral. Si entra en `MIDIENDO` pero queda en `SENAL BAJA`, registrar además
 
 ## 4. Prueba de navegación local/remota
 
-1. En la app 1.0.4 seleccionar `Signos vitales` y esperar confirmación.
+1. En la app 1.0.11 seleccionar `Signos vitales` y esperar confirmación.
 2. Con los botones físicos ir a `Estado`.
 3. Esperar al menos 10 segundos. Debe permanecer en Estado.
 4. Confirmar en la app que `Solicitado` puede seguir diciendo Signos, pero
@@ -110,6 +110,6 @@ umbral. Si entra en `MIDIENDO` pero queda en `SENAL BAJA`, registrar además
 - SOS y confirmación de alertas;
 - al menos 30 minutos observando `I` y `P` por Serial.
 
-Volver a BIOSYS 1.0.1 si aparecen reinicios, bloqueo de botones/SOS, pérdida
+Volver al ultimo firmware fisicamente verificado si aparecen reinicios, bloqueo de botones/SOS, pérdida
 persistente del bus I2C o regresión de WiFi/medicación. Compilar no sustituye
 esta validación y ninguna lectura de VitalWatch es clínicamente validada.
