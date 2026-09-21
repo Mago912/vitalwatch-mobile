@@ -14,7 +14,7 @@ if ([string]::IsNullOrWhiteSpace($safeLabel)) {
 }
 
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$outputDirectory = Join-Path $projectRoot 'measurements\biosys-1.0.4'
+$outputDirectory = Join-Path $projectRoot 'measurements\biosys-1.0.9'
 $csvPath = Join-Path $outputDirectory "$timestamp-$safeLabel.csv"
 $metadataPath = Join-Path $outputDirectory "$timestamp-$safeLabel.json"
 $csvHeader = 'type,session_id,sample_index,sample_time_us,processing_time_us,red_raw,ir_raw,ir_dc,ir_ac,ir_filtered,peak_custom,peak_sparkfun,peak_accepted,ibi_ms,bpm_instant,bpm_robust,hr_status,ppg_quality,ppg_quality_flags,spo2_result,spo2_status,spo2_quality,led_amplitude,sparkfun_check_count,sparkfun_available,hw_fifo_read_ptr,hw_fifo_write_ptr,hw_fifo_overflow,suspected_drops,missing_samples,mpu_time_us,ax_g,ay_g,az_g,acc_mag_g,gyro_mag_rad_s,mpu_dt_us,mpu_saturated,mpu_missed_deadlines,spo2_maxim,spo2_maxim_valid,spo2_custom_candidate,measurement_state,loop_last_us,loop_max_us,display_render_us,i2c_failures'
@@ -62,7 +62,7 @@ try {
 }
 
 $metadata = [ordered]@{
-  firmware = 'BIOSYS 1.0.4'
+  firmware = 'BIOSYS 1.0.9'
   mode = 'BIO_RESEARCH_MODE=1'
   label = $Label
   port = $Port
@@ -70,7 +70,7 @@ $metadata = [ordered]@{
   requestedDurationSeconds = $DurationSeconds
   startedAt = $startedAt.ToString('o')
   finishedAt = (Get-Date).ToString('o')
-  ppgRecords = $recordCount
+  researchRecords = $recordCount
   csvFile = Split-Path -Leaf $csvPath
   note = 'Datos experimentales. No usar para diagnostico medico.'
 }
@@ -80,7 +80,7 @@ $metadata = [ordered]@{
   $utf8
 )
 
-Write-Host "Captura finalizada: $recordCount registros PPG."
+Write-Host "Captura finalizada: $recordCount registros PPG + MPU."
 Write-Host "CSV: $csvPath"
 Write-Host "Metadatos: $metadataPath"
 

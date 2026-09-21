@@ -50,5 +50,5 @@ pruebas de mesa dejen de dispararse.
 - Si falta el MPU6500 o falla I2C, el sistema debe informar sensor no disponible
   y no inventar una caida.
 
-La implementacion se hara en una version nueva del firmware. BIOSYS 1.0.8 se
-mantiene como referencia y no se modifica.
+La implementacion se hara en una version nueva del firmware. BIOSYS 1.0.9 se
+mantiene como referencia instalada y no se modifica durante la captura.
