@@ -15,14 +15,14 @@ function createEmptyForm() {
     name: '',
     dose: '',
     date: currentArgentinaDate(),
-    time: '',
+    times: [''],
     days: [...DEFAULT_MEDICATION_DAYS],
   };
 }
 
 export default function MedicationScreen() {
   const {
-    addMedication,
+    addMedicationSchedules,
     deleteMedication,
     isMedicationSyncing,
     markMedicationPending,
@@ -46,7 +46,7 @@ export default function MedicationScreen() {
       name: medication.name,
       dose: medication.dose || '',
       date: medication.date,
-      time: medication.time,
+      times: [medication.time],
       days: normalizeMedicationDays(medication.days),
     });
   }
@@ -61,10 +61,10 @@ export default function MedicationScreen() {
     const name = form.name.trim();
     const dose = form.dose.trim();
     const date = form.date.trim();
-    const time = form.time.trim();
+    const times = Array.from(new Set(form.times.map((time) => time.trim()))).sort();
 
-    if (!name || !date || !time || form.days.length === 0) {
-      setFormError('Completa el nombre, la fecha de inicio, la hora y al menos un dia.');
+    if (!name || !date || times.some((time) => !time) || form.days.length === 0) {
+      setFormError('Completa el nombre, la fecha de inicio, los horarios y al menos un dia.');
       return;
     }
 
@@ -73,8 +73,8 @@ export default function MedicationScreen() {
       return;
     }
 
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
-      setFormError('Escribe la hora con formato HH:MM, por ejemplo 09:00.');
+    if (times.some((time) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(time))) {
+      setFormError('Escribe cada hora con formato HH:MM, por ejemplo 09:00.');
       return;
     }
 
@@ -87,17 +87,19 @@ export default function MedicationScreen() {
         name,
         dose: dose || 'Dosis no especificada',
         date,
-        time,
+        time: times[0],
         days: normalizeMedicationDays(form.days),
       });
     } else {
-      wasSaved = await addMedication({
-        name,
-        dose: dose || 'Dosis no especificada',
-        date,
-        time,
-        days: normalizeMedicationDays(form.days),
-      });
+      wasSaved = await addMedicationSchedules(
+        times.map((time) => ({
+          name,
+          dose: dose || 'Dosis no especificada',
+          date,
+          time,
+          days: normalizeMedicationDays(form.days),
+        }))
+      );
     }
 
     if (wasSaved) {
@@ -116,6 +118,26 @@ export default function MedicationScreen() {
         days: Array.from(new Set(selectedDays)).sort((left, right) => left - right),
       };
     });
+  }
+
+  function updateTime(index: number, time: string) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      times: currentForm.times.map((currentTime, currentIndex) =>
+        currentIndex === index ? time : currentTime
+      ),
+    }));
+  }
+
+  function addTime() {
+    setForm((currentForm) => ({ ...currentForm, times: [...currentForm.times, ''] }));
+  }
+
+  function removeTime(index: number) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      times: currentForm.times.filter((_, currentIndex) => currentIndex !== index),
+    }));
   }
 
   async function handleMedicationStatus(medication: Medication) {
@@ -167,13 +189,44 @@ export default function MedicationScreen() {
           placeholder="Ej: 2026-08-31"
           editable={!isMedicationSyncing}
         />
-        <InputField
-          label="Hora"
-          value={form.time}
-          onChangeText={(time) => setForm((currentForm) => ({ ...currentForm, time }))}
-          placeholder="Ej: 09:00"
-          editable={!isMedicationSyncing}
-        />
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>{editingMedication ? 'Hora' : 'Horarios'}</Text>
+          {!editingMedication ? (
+            <Text style={styles.helpText}>
+              Agrega una hora por cada toma diaria. Por ejemplo, 10:00 y 22:00.
+            </Text>
+          ) : null}
+          {form.times.map((time, index) => (
+            <View key={index} style={styles.timeRow}>
+              <TextInput
+                editable={!isMedicationSyncing}
+                value={time}
+                onChangeText={(nextTime) => updateTime(index, nextTime)}
+                placeholder="Ej: 09:00"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numbers-and-punctuation"
+                style={[styles.input, styles.timeInput, isMedicationSyncing && styles.disabledInput]}
+              />
+              {!editingMedication && form.times.length > 1 ? (
+                <Pressable
+                  accessibilityLabel={`Eliminar horario ${index + 1}`}
+                  disabled={isMedicationSyncing}
+                  onPress={() => removeTime(index)}
+                  style={styles.removeTimeButton}>
+                  <Text style={styles.removeTimeButtonText}>Quitar</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ))}
+          {!editingMedication ? (
+            <Pressable
+              disabled={isMedicationSyncing}
+              onPress={addTime}
+              style={[styles.addTimeButton, isMedicationSyncing && styles.disabledButton]}>
+              <Text style={styles.addTimeButtonText}>+ Agregar otro horario</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Se repite los dias</Text>
@@ -458,6 +511,41 @@ const styles = StyleSheet.create({
     fontSize: 17,
     minHeight: 54,
     paddingHorizontal: 14,
+  },
+  timeRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  timeInput: {
+    flex: 1,
+  },
+  addTimeButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#E0F2FE',
+    borderRadius: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  addTimeButtonText: {
+    color: '#075985',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  removeTimeButton: {
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    minHeight: 54,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  removeTimeButtonText: {
+    color: '#991B1B',
+    fontSize: 14,
+    fontWeight: '900',
   },
   weekdayRow: {
     flexDirection: 'row',

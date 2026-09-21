@@ -61,7 +61,9 @@ export function getRemoteStatus(
   ) {
     return 'Alerta';
   }
-  if (latestEvent === 'medication_pending') return 'Medicacion pendiente';
+  if (latestEvent === 'medication_pending' || latestEvent === 'medication_missed') {
+    return 'Medicacion pendiente';
+  }
 
   // Se conservan los umbrales experimentales existentes, solo para valores presentes.
   if ((heartRate !== null && heartRate >= 110) || (oxygen !== null && oxygen <= 92)) return 'SOS';

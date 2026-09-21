@@ -195,7 +195,7 @@ async function markMedicationStatus(
 ) {
   const { data: medication, error: medicationError } = await supabaseAdmin
     .from('medications')
-    .select('id, name, scheduled_date, scheduled_days, scheduled_time')
+    .select('id, name, dose, scheduled_date, scheduled_days, scheduled_time')
     .eq('id', medicationId)
     .eq('user_id', device.user_id)
     .eq('active', true)
@@ -228,13 +228,19 @@ async function markMedicationStatus(
 
   if (status !== 'taken') return;
 
-  const { error: eventError } = await supabaseAdmin.from('device_events').insert({
-    device_id: device.id,
-    type: 'medication_taken',
-    severity: 'info',
-    message: `${medication.name} fue marcado como tomado desde la pulsera.`,
-    event_time: nowIso,
-  });
+  const { error: eventError } = await supabaseAdmin.from('device_events').upsert(
+    {
+      device_id: device.id,
+      type: 'medication_taken',
+      severity: 'info',
+      message: `${medication.name}${medication.dose ? ` (${medication.dose})` : ''} fue marcado como tomado desde la pulsera.`,
+      event_time: nowIso,
+      source_event_id: `medication-taken:${medication.id}:${Math.floor(
+        new Date(occurrence.iso).getTime() / 1000
+      )}`,
+    },
+    { ignoreDuplicates: true, onConflict: 'device_id,source_event_id' }
+  );
 
   if (eventError) throw eventError;
 }

@@ -45,6 +45,7 @@ test('las alertas reales tienen prioridad sobre la falta de lecturas', () => {
   assert.equal(getRemoteStatus([], null, null, 'sos'), 'SOS');
   assert.equal(getRemoteStatus([{ type: 'battery_low' }], null, null, 'none'), 'Alerta');
   assert.equal(getRemoteStatus([{ type: 'medication_pending' }], null, null, 'none'), 'Medicacion pendiente');
+  assert.equal(getRemoteStatus([{ type: 'medication_missed' }], null, null, 'none'), 'Medicacion pendiente');
   assert.equal(getRemoteStatus([], null, 91, 'none'), 'SOS');
   assert.equal(getRemoteStatus([], 101, null, 'none'), 'Alerta');
 });

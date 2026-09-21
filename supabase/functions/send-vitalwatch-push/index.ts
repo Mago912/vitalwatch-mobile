@@ -133,6 +133,8 @@ async function sendEmergencyTelegram(event: DeviceEvent, supabaseAdmin: any) {
     'device_offline',
     'fall_detected',
     'heart_rate_abnormal',
+    'medication_missed',
+    'medication_taken',
     'sos',
     'spo2_low',
   ]);
@@ -231,6 +233,8 @@ function createTelegramBody(event: DeviceEvent, userName: string) {
     device_offline: 'SIN COMUNICACION',
     fall_detected: 'CAIDA CONFIRMADA',
     heart_rate_abnormal: 'FRECUENCIA CARDIACA FUERA DEL RANGO EXPERIMENTAL',
+    medication_missed: 'MEDICACION DEMORADA',
+    medication_taken: 'MEDICACION TOMADA',
     sos: 'SOS ACTIVADO',
     spo2_low: 'SpO2 BAJA CONFIRMADA',
   };
@@ -246,13 +250,20 @@ function createTelegramBody(event: DeviceEvent, userName: string) {
     event.battery_level === null ? null : `Bateria: ${event.battery_level}%`,
   ].filter(Boolean);
 
+  const recommendation =
+    event.type === 'medication_taken'
+      ? 'Registro de medicacion confirmado.'
+      : event.type === 'medication_missed'
+        ? 'Confirmar con la persona si pudo tomar la medicacion.'
+        : 'Revisar el estado de la persona.';
+
   return [
     `VITALWATCH - ${labels[event.type] ?? 'ALERTA'}`,
     `Usuario: ${userName}`,
     `Fecha y hora: ${date}`,
     event.message.trim(),
     ...measurements,
-    'Revisar el estado de la persona.',
+    recommendation,
   ]
     .filter(Boolean)
     .join('\n');

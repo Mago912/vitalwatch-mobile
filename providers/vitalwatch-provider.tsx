@@ -42,9 +42,10 @@ import {
   readRemoteMeasurements,
 } from '@/lib/vitalwatch-readings';
 import {
-  createRemoteMedication,
+  createRemoteMedications,
   deleteRemoteMedication,
   fetchRemoteMedications,
+  MedicationDraft,
   setRemoteMedicationStatus,
   updateRemoteMedication,
 } from '@/lib/vitalwatch-medications';
@@ -91,7 +92,7 @@ type VitalWatchContextValue = {
   status: WatchStatus;
   syncError: string | null;
   vitals: VitalSigns;
-  addMedication: (medication: Omit<Medication, 'id' | 'status'>) => Promise<boolean>;
+  addMedicationSchedules: (medications: MedicationDraft[]) => Promise<boolean>;
   addPhoneContact: (contact: PhoneContactInput) => Promise<boolean>;
   deleteEmergencyContact: (id: string) => Promise<boolean>;
   deleteMedication: (id: string) => Promise<boolean>;
@@ -169,6 +170,7 @@ function getRemoteEventLabel(type: string) {
     fall_detected: 'Caida detectada',
     heart_rate_abnormal: 'Frecuencia cardiaca fuera del rango',
     heart_rate_high: 'Ritmo cardiaco alto',
+    medication_missed: 'Medicacion demorada',
     medication_pending: 'Medicacion pendiente',
     medication_taken: 'Medicacion tomada',
     message_request: 'MENSAJE',
@@ -843,11 +845,15 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
     }
   }
 
-  function addMedication(medication: Omit<Medication, 'id' | 'status'>) {
+  function addMedicationSchedules(medicationsToAdd: MedicationDraft[]) {
+    const firstMedication = medicationsToAdd[0];
+
     return runMedicationMutation(
-      (deviceCode) => createRemoteMedication(deviceCode, medication),
+      (deviceCode) => createRemoteMedications(deviceCode, medicationsToAdd),
       'Medicacion agregada',
-      `Se agrego ${medication.name}.`
+      `Se agrego ${firstMedication?.name ?? 'un medicamento'} en ${medicationsToAdd.length} horario${
+        medicationsToAdd.length === 1 ? '' : 's'
+      }.`
     );
   }
 
@@ -1017,7 +1023,7 @@ export function VitalWatchProvider({ children }: PropsWithChildren) {
       status,
       syncError,
       vitals,
-      addMedication,
+      addMedicationSchedules,
       addPhoneContact,
       deleteEmergencyContact,
       deleteMedication,

@@ -6,7 +6,7 @@ import {
 } from '@/lib/medication-schedule';
 import { supabase } from '@/lib/supabase';
 
-type MedicationDraft = Pick<Medication, 'name' | 'dose' | 'date' | 'time' | 'days'>;
+export type MedicationDraft = Pick<Medication, 'name' | 'dose' | 'date' | 'time' | 'days'>;
 
 type DeviceRow = {
   id: number;
@@ -36,16 +36,25 @@ export async function fetchRemoteMedications(deviceCode: string) {
 }
 
 export async function createRemoteMedication(deviceCode: string, medication: MedicationDraft) {
+  return createRemoteMedications(deviceCode, [medication]);
+}
+
+export async function createRemoteMedications(
+  deviceCode: string,
+  medications: MedicationDraft[]
+) {
   const device = await findDevice(deviceCode);
-  const { error } = await supabase.from('medications').insert({
-    user_id: device.user_id,
-    name: medication.name.trim(),
-    dose: medication.dose.trim(),
-    scheduled_date: medication.date,
-    scheduled_days: normalizeMedicationDays(medication.days ?? DEFAULT_MEDICATION_DAYS),
-    scheduled_time: `${medication.time}:00`,
-    active: true,
-  });
+  const { error } = await supabase.from('medications').insert(
+    medications.map((medication) => ({
+      user_id: device.user_id,
+      name: medication.name.trim(),
+      dose: medication.dose.trim(),
+      scheduled_date: medication.date,
+      scheduled_days: normalizeMedicationDays(medication.days ?? DEFAULT_MEDICATION_DAYS),
+      scheduled_time: `${medication.time}:00`,
+      active: true,
+    }))
+  );
 
   if (error) {
     throw new Error(`No se pudo agregar el medicamento: ${error.message}`);
