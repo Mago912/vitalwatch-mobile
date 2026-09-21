@@ -2,6 +2,12 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { appColors, currentArgentinaDate, Medication } from '@/constants/vitalwatch';
+import {
+  DEFAULT_MEDICATION_DAYS,
+  medicationDaysLabel,
+  MEDICATION_WEEKDAYS,
+  normalizeMedicationDays,
+} from '@/lib/medication-schedule';
 import { useVitalWatch } from '@/providers/vitalwatch-provider';
 
 function createEmptyForm() {
@@ -10,6 +16,7 @@ function createEmptyForm() {
     dose: '',
     date: currentArgentinaDate(),
     time: '',
+    days: [...DEFAULT_MEDICATION_DAYS],
   };
 }
 
@@ -40,6 +47,7 @@ export default function MedicationScreen() {
       dose: medication.dose || '',
       date: medication.date,
       time: medication.time,
+      days: normalizeMedicationDays(medication.days),
     });
   }
 
@@ -55,8 +63,8 @@ export default function MedicationScreen() {
     const date = form.date.trim();
     const time = form.time.trim();
 
-    if (!name || !date || !time) {
-      setFormError('Completa el nombre, la fecha y la hora.');
+    if (!name || !date || !time || form.days.length === 0) {
+      setFormError('Completa el nombre, la fecha de inicio, la hora y al menos un dia.');
       return;
     }
 
@@ -80,6 +88,7 @@ export default function MedicationScreen() {
         dose: dose || 'Dosis no especificada',
         date,
         time,
+        days: normalizeMedicationDays(form.days),
       });
     } else {
       wasSaved = await addMedication({
@@ -87,12 +96,26 @@ export default function MedicationScreen() {
         dose: dose || 'Dosis no especificada',
         date,
         time,
+        days: normalizeMedicationDays(form.days),
       });
     }
 
     if (wasSaved) {
       clearForm();
     }
+  }
+
+  function toggleDay(day: number) {
+    setForm((currentForm) => {
+      const selectedDays = currentForm.days.includes(day)
+        ? currentForm.days.filter((selectedDay) => selectedDay !== day)
+        : [...currentForm.days, day];
+
+      return {
+        ...currentForm,
+        days: Array.from(new Set(selectedDays)).sort((left, right) => left - right),
+      };
+    });
   }
 
   async function handleMedicationStatus(medication: Medication) {
@@ -138,7 +161,7 @@ export default function MedicationScreen() {
           editable={!isMedicationSyncing}
         />
         <InputField
-          label="Fecha"
+          label="Fecha de inicio"
           value={form.date}
           onChangeText={(date) => setForm((currentForm) => ({ ...currentForm, date }))}
           placeholder="Ej: 2026-08-31"
@@ -151,6 +174,34 @@ export default function MedicationScreen() {
           placeholder="Ej: 09:00"
           editable={!isMedicationSyncing}
         />
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Se repite los dias</Text>
+          <Text style={styles.helpText}>Selecciona los dias en que debe avisar la pulsera.</Text>
+          <View style={styles.weekdayRow}>
+            {MEDICATION_WEEKDAYS.map((day) => {
+              const selected = form.days.includes(day.value);
+              return (
+                <Pressable
+                  key={day.value}
+                  disabled={isMedicationSyncing}
+                  onPress={() => toggleDay(day.value)}
+                  style={[
+                    styles.weekdayButton,
+                    selected && styles.weekdayButtonSelected,
+                    isMedicationSyncing && styles.disabledButton,
+                  ]}>
+                  <Text style={[styles.weekdayText, selected && styles.weekdayTextSelected]}>
+                    {day.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.selectedDaysText}>
+            Configurado: {medicationDaysLabel(form.days)}
+          </Text>
+        </View>
 
         <View style={styles.formActions}>
           <Pressable
@@ -219,7 +270,10 @@ export default function MedicationScreen() {
                   <Text style={styles.medicationName}>{medication.name}</Text>
                   <Text style={styles.medicationTime}>Dosis: {medication.dose || 'No cargada'}</Text>
                   <Text style={styles.medicationTime}>
-                    Fecha y hora: {formatMedicationDate(medication.date)} a las {medication.time}
+                    Proxima toma: {formatMedicationDate(medication.nextDate || medication.date)} a las {medication.time}
+                  </Text>
+                  <Text style={styles.medicationTime}>
+                    Dias: {medicationDaysLabel(medication.days)}
                   </Text>
                 </View>
                 <View style={[styles.badge, isTaken ? styles.badgeTaken : styles.badgePending]}>
@@ -404,6 +458,39 @@ const styles = StyleSheet.create({
     fontSize: 17,
     minHeight: 54,
     paddingHorizontal: 14,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  weekdayButton: {
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderColor: appColors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    minHeight: 42,
+    justifyContent: 'center',
+    minWidth: 48,
+    paddingHorizontal: 8,
+  },
+  weekdayButtonSelected: {
+    backgroundColor: '#DBEAFE',
+    borderColor: appColors.primary,
+  },
+  weekdayText: {
+    color: appColors.muted,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  weekdayTextSelected: {
+    color: '#075985',
+  },
+  selectedDaysText: {
+    color: '#075985',
+    fontSize: 14,
+    fontWeight: '800',
   },
   disabledInput: {
     opacity: 0.6,

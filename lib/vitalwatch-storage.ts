@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { currentArgentinaDate } from '@/constants/vitalwatch';
+import { DEFAULT_MEDICATION_DAYS, normalizeMedicationDays } from '@/lib/medication-schedule';
 import type {
   EmergencyContact,
   EventItem,
@@ -40,6 +41,7 @@ export async function loadMedications(fallback: Medication[]) {
   return medications.map((medication) => ({
     ...medication,
     date: medication.date || currentArgentinaDate(),
+    days: normalizeMedicationDays(medication.days ?? DEFAULT_MEDICATION_DAYS),
   }));
 }
 

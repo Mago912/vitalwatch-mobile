@@ -28,6 +28,10 @@ export type Medication = {
   dose: string;
   date: string;
   time: string;
+  // 1 = lunes ... 7 = domingo. Se mantiene opcional para migrar datos antiguos.
+  days?: number[];
+  // Proxima ocurrencia que debe mostrar la app y la pantalla virtual.
+  nextDate?: string;
   status: 'Pendiente' | 'Tomado';
 };
 

@@ -1,7 +1,7 @@
 {
   "name": "vitalwatch-mobile",
   "main": "expo-router/entry",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -34,6 +34,7 @@
     "firmware:tft:upload": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/esp32-firmware.ps1 -Action tft-upload",
     "simulate:device": "node --env-file=.env.local --env-file=.env.simulator.local scripts/vitalwatch-simulator.mjs",
     "test:readings": "node --no-warnings --test scripts/test-vitalwatch-readings.mjs",
+    "test:medications": "node --no-warnings --test scripts/test-medication-schedule.mjs",
     "test:telegram": "node --no-warnings --test scripts/test-vitalwatch-telegram.mjs",
     "test:security": "node --env-file=.env.local scripts/test-vitalwatch-security.mjs"
   },

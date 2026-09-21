@@ -20,6 +20,7 @@ type MedicationRow = {
   id: number;
   name: string;
   scheduled_date: string;
+  scheduled_days: number[] | null;
   scheduled_time: string;
 };
 
@@ -136,7 +137,7 @@ export default {
 async function listMedications(supabaseAdmin: any, userId: number) {
   const { data: medicationRows, error: medicationsError } = await supabaseAdmin
     .from('medications')
-    .select('id, name, dose, scheduled_date, scheduled_time')
+    .select('id, name, dose, scheduled_date, scheduled_days, scheduled_time')
     .eq('user_id', userId)
     .eq('active', true)
     .order('scheduled_date', { ascending: true })
@@ -155,43 +156,33 @@ async function listMedications(supabaseAdmin: any, userId: number) {
 
   if (logsError) throw logsError;
 
-  const latestStatus = new Map<number, string>();
-  const scheduledByMedication = new Map(
-    medications.map((medication) => [
-      medication.id,
-      new Date(
-        scheduledDateTimeToIso(medication.scheduled_date, medication.scheduled_time.slice(0, 5))
-      ).getTime(),
-    ])
-  );
-
-  for (const log of (logRows ?? []) as MedicationLogRow[]) {
-    const expectedSchedule = scheduledByMedication.get(log.medication_id);
-    const loggedSchedule = new Date(log.scheduled_for).getTime();
-    const belongsToCurrentSchedule =
-      expectedSchedule !== undefined && Math.abs(loggedSchedule - expectedSchedule) <= 60_000;
-
-    if (belongsToCurrentSchedule && !latestStatus.has(log.medication_id)) {
-      latestStatus.set(log.medication_id, log.status);
-    }
-  }
-
-  const now = Date.now();
-  const reminderWindowMs = 6 * 60 * 60 * 1000;
+  const logs = (logRows ?? []) as MedicationLogRow[];
+  const now = new Date();
 
   return medications.map((medication) => {
-    const scheduledAt = scheduledByMedication.get(medication.id) ?? Number.NaN;
-    const taken = latestStatus.get(medication.id) === 'taken';
+    const days = normalizeMedicationDays(medication.scheduled_days);
+    const occurrences = getMedicationOccurrences(
+      medication.scheduled_date,
+      medication.scheduled_time.slice(0, 5),
+      days,
+      now,
+      3
+    );
+    const occurrence = occurrences[0];
+    const status = occurrence
+      ? getOccurrenceStatus(logs, medication.id, occurrence.iso)
+      : 'pending';
 
     return {
       id: String(medication.id),
       name: medication.name,
       dose: medication.dose,
-      date: medication.scheduled_date,
+      date: occurrence?.date ?? medication.scheduled_date,
       time: medication.scheduled_time.slice(0, 5),
-      status: taken ? 'Tomado' : 'Pendiente',
+      days,
+      status: status === 'taken' ? 'Tomado' : 'Pendiente',
       reminderDue:
-        !taken && Number.isFinite(scheduledAt) && now >= scheduledAt && now < scheduledAt + reminderWindowMs,
+        status !== 'taken' && occurrence !== undefined && isReminderDue(occurrence.timestamp, now),
     };
   });
 }
@@ -204,7 +195,7 @@ async function markMedicationStatus(
 ) {
   const { data: medication, error: medicationError } = await supabaseAdmin
     .from('medications')
-    .select('id, name, scheduled_date, scheduled_time')
+    .select('id, name, scheduled_date, scheduled_days, scheduled_time')
     .eq('id', medicationId)
     .eq('user_id', device.user_id)
     .eq('active', true)
@@ -213,16 +204,22 @@ async function markMedicationStatus(
   if (medicationError) throw medicationError;
   if (!medication) throw new Error('Medicamento no encontrado.');
 
-  const now = new Date().toISOString();
-  const scheduledFor = scheduledDateTimeToIso(
+  const now = new Date();
+  const occurrence = getMedicationOccurrences(
     medication.scheduled_date,
-    medication.scheduled_time.slice(0, 5)
-  );
+    medication.scheduled_time.slice(0, 5),
+    medication.scheduled_days,
+    now,
+    1
+  )[0];
+  if (!occurrence) throw new Error('No hay una proxima toma programada.');
+
+  const nowIso = now.toISOString();
   const { error: logError } = await supabaseAdmin.from('medication_logs').insert({
     medication_id: medication.id,
     device_id: device.id,
-    scheduled_for: scheduledFor,
-    taken_at: status === 'taken' ? now : null,
+    scheduled_for: occurrence.iso,
+    taken_at: status === 'taken' ? nowIso : null,
     status,
     source: 'esp32',
   });
@@ -236,7 +233,7 @@ async function markMedicationStatus(
     type: 'medication_taken',
     severity: 'info',
     message: `${medication.name} fue marcado como tomado desde la pulsera.`,
-    event_time: now,
+    event_time: nowIso,
   });
 
   if (eventError) throw eventError;
@@ -266,8 +263,90 @@ function isDevicePayload(payload: unknown): payload is DevicePayload {
   );
 }
 
+const DEFAULT_MEDICATION_DAYS = [1, 2, 3, 4, 5, 6, 7];
+
+function normalizeMedicationDays(days: number[] | null | undefined) {
+  const normalized = Array.from(
+    new Set((days ?? DEFAULT_MEDICATION_DAYS).filter((day) => Number.isInteger(day) && day >= 1 && day <= 7))
+  ).sort((left, right) => left - right);
+  return normalized.length > 0 ? normalized : [...DEFAULT_MEDICATION_DAYS];
+}
+
+function getMedicationOccurrences(
+  startDate: string,
+  time: string,
+  days: number[] | null | undefined,
+  now: Date,
+  amount: number
+) {
+  const selectedDays = normalizeMedicationDays(days);
+  const today = currentArgentinaDate(now);
+  const startOffset = Math.max(0, differenceInDays(startDate, today));
+  const occurrences: Array<{ date: string; iso: string; timestamp: number }> = [];
+
+  for (let offset = startOffset; offset <= startOffset + 21 && occurrences.length < amount; offset += 1) {
+    const date = addDays(today, offset);
+    if (date < startDate || !selectedDays.includes(isoWeekday(date))) continue;
+
+    const iso = scheduledDateTimeToIso(date, time);
+    const timestamp = new Date(iso).getTime();
+    const isCurrentReminderWindow =
+      timestamp <= now.getTime() && now.getTime() < timestamp + 6 * 60 * 60 * 1000;
+
+    if (timestamp >= now.getTime() || isCurrentReminderWindow) {
+      occurrences.push({ date, iso, timestamp });
+    }
+  }
+
+  return occurrences;
+}
+
+function getOccurrenceStatus(logs: MedicationLogRow[], medicationId: number, iso: string) {
+  const expectedSchedule = new Date(iso).getTime();
+  const matchingLog = logs.find(
+    (log) =>
+      log.medication_id === medicationId &&
+      Math.abs(new Date(log.scheduled_for).getTime() - expectedSchedule) <= 60_000
+  );
+  return matchingLog?.status ?? 'pending';
+}
+
+function isReminderDue(timestamp: number, now: Date) {
+  return now.getTime() >= timestamp && now.getTime() < timestamp + 6 * 60 * 60 * 1000;
+}
+
 function scheduledDateTimeToIso(date: string, time: string) {
   return new Date(`${date}T${time}:00-03:00`).toISOString();
+}
+
+function currentArgentinaDate(value: Date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date: string, amount: number) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + amount);
+  return value.toISOString().slice(0, 10);
+}
+
+function differenceInDays(left: string, right: string) {
+  const leftTime = new Date(`${left}T12:00:00Z`).getTime();
+  const rightTime = new Date(`${right}T12:00:00Z`).getTime();
+  return Math.floor((leftTime - rightTime) / 86_400_000);
+}
+
+function isoWeekday(date: string) {
+  const day = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return day === 0 ? 7 : day;
 }
 
 function isAlertState(value: unknown): value is AlertState {

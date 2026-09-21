@@ -8,14 +8,14 @@ if (!supabaseUrl || !publishableKey) {
 }
 
 const config = await readFile(
-  'esp32/VitalWatch_BIOSYS_1_0_7/vitalwatch_config.h',
+  'esp32/VitalWatch_BIOSYS_1_0_9/vitalwatch_config.h',
   'utf8',
 );
 const tokenMatch = config.match(/DEVICE_TOKEN\s*=\s*"([^"]+)"/);
 
 if (!tokenMatch) {
   throw new Error(
-    'No se encontro DEVICE_TOKEN en esp32/VitalWatch_FW_0_9_1/vitalwatch_config.h.',
+    'No se encontro DEVICE_TOKEN en esp32/VitalWatch_BIOSYS_1_0_9/vitalwatch_config.h.',
   );
 }
 
@@ -93,6 +93,16 @@ const medicationDatesAreValid =
 const medicationReminderContractIsValid =
   Array.isArray(validDeviceBody.medications) &&
   validDeviceBody.medications.every((medication) => typeof medication.reminderDue === 'boolean');
+const medicationDaysContractIsValid =
+  Array.isArray(validDeviceBody.medications) &&
+  validDeviceBody.medications.every(
+    (medication) =>
+      Array.isArray(medication.days) &&
+      medication.days.length > 0 &&
+      medication.days.every(
+        (day) => Number.isInteger(day) && day >= 1 && day <= 7
+      )
+  );
 
 const wrongTelemetryToken = await fetch(
   `${supabaseUrl}/functions/v1/vitalwatch-device-telemetry`,
@@ -188,6 +198,7 @@ const checks = [
   ['Contrato de control TFT', displayControlIsValid, validDeviceToken.status],
   ['Control TFT rapido', fastDisplayControlIsValid, fastDisplayControl.status],
   ['Fecha programada de medicamentos', medicationDatesAreValid, validDeviceToken.status],
+  ['Dias semanales de medicamentos', medicationDaysContractIsValid, validDeviceToken.status],
   ['Recordatorio para TFT', medicationReminderContractIsValid, validDeviceToken.status],
   ['Telemetria con token incorrecto', !wrongTelemetryToken.ok, wrongTelemetryToken.status],
   ['Mensajeria con token incorrecto', !wrongMessagingToken.ok, wrongMessagingToken.status],

@@ -1,7 +1,12 @@
 import { Medication } from '@/constants/vitalwatch';
+import {
+  DEFAULT_MEDICATION_DAYS,
+  getMedicationOccurrences,
+  normalizeMedicationDays,
+} from '@/lib/medication-schedule';
 import { supabase } from '@/lib/supabase';
 
-type MedicationDraft = Pick<Medication, 'name' | 'dose' | 'date' | 'time'>;
+type MedicationDraft = Pick<Medication, 'name' | 'dose' | 'date' | 'time' | 'days'>;
 
 type DeviceRow = {
   id: number;
@@ -13,6 +18,7 @@ type MedicationRow = {
   id: number;
   name: string;
   scheduled_date: string;
+  scheduled_days: number[] | null;
   scheduled_time: string;
 };
 
@@ -36,6 +42,7 @@ export async function createRemoteMedication(deviceCode: string, medication: Med
     name: medication.name.trim(),
     dose: medication.dose.trim(),
     scheduled_date: medication.date,
+    scheduled_days: normalizeMedicationDays(medication.days ?? DEFAULT_MEDICATION_DAYS),
     scheduled_time: `${medication.time}:00`,
     active: true,
   });
@@ -56,6 +63,7 @@ export async function updateRemoteMedication(deviceCode: string, medication: Med
       name: medication.name.trim(),
       dose: medication.dose.trim(),
       scheduled_date: medication.date,
+      scheduled_days: normalizeMedicationDays(medication.days ?? DEFAULT_MEDICATION_DAYS),
       scheduled_time: `${medication.time}:00`,
     })
     .eq('id', medicationId)
@@ -89,11 +97,11 @@ export async function setRemoteMedicationStatus(
   status: 'pending' | 'taken'
 ) {
   const device = await findDevice(deviceCode);
-  const now = new Date().toISOString();
+  const now = new Date();
   const medicationId = parseMedicationId(id);
   const { data: medication, error: medicationError } = await supabase
     .from('medications')
-    .select('scheduled_date, scheduled_time')
+    .select('scheduled_date, scheduled_days, scheduled_time')
     .eq('id', medicationId)
     .eq('user_id', device.user_id)
     .single();
@@ -102,14 +110,23 @@ export async function setRemoteMedicationStatus(
     throw new Error(`No se pudo consultar el horario: ${medicationError.message}`);
   }
 
+  const occurrence = getMedicationOccurrences(
+    medication.scheduled_date,
+    medication.scheduled_time.slice(0, 5),
+    medication.scheduled_days ?? DEFAULT_MEDICATION_DAYS,
+    now,
+    1
+  )[0];
+
+  if (!occurrence) {
+    throw new Error('No hay una proxima toma programada para este medicamento.');
+  }
+
   const { error } = await supabase.from('medication_logs').insert({
     medication_id: medicationId,
     device_id: device.id,
-    scheduled_for: scheduledDateTimeToIso(
-      medication.scheduled_date,
-      medication.scheduled_time.slice(0, 5)
-    ),
-    taken_at: status === 'taken' ? now : null,
+    scheduled_for: occurrence.iso,
+    taken_at: status === 'taken' ? now.toISOString() : null,
     status,
     source: 'mobile_app',
   });
@@ -142,7 +159,7 @@ async function findDevice(deviceCode: string): Promise<DeviceRow> {
 async function listMedications(device: DeviceRow): Promise<Medication[]> {
   const { data: medicationRows, error: medicationsError } = await supabase
     .from('medications')
-    .select('id, name, dose, scheduled_date, scheduled_time')
+    .select('id, name, dose, scheduled_date, scheduled_days, scheduled_time')
     .eq('user_id', device.user_id)
     .eq('active', true)
     .order('scheduled_date', { ascending: true })
@@ -153,10 +170,7 @@ async function listMedications(device: DeviceRow): Promise<Medication[]> {
   }
 
   const medications = (medicationRows ?? []) as MedicationRow[];
-
-  if (medications.length === 0) {
-    return [];
-  }
+  if (medications.length === 0) return [];
 
   const { data: logRows, error: logsError } = await supabase
     .from('medication_logs')
@@ -172,39 +186,43 @@ async function listMedications(device: DeviceRow): Promise<Medication[]> {
     throw new Error(`No se pudo leer el estado de los medicamentos: ${logsError.message}`);
   }
 
-  const latestStatus = new Map<number, string>();
-  const scheduledByMedication = new Map(
-    medications.map((medication) => [
-      medication.id,
-      new Date(
-        scheduledDateTimeToIso(medication.scheduled_date, medication.scheduled_time.slice(0, 5))
-      ).getTime(),
-    ])
-  );
+  const logs = (logRows ?? []) as MedicationLogRow[];
+  const now = new Date();
 
-  for (const log of (logRows ?? []) as MedicationLogRow[]) {
-    const expectedSchedule = scheduledByMedication.get(log.medication_id);
-    const loggedSchedule = new Date(log.scheduled_for).getTime();
-    const belongsToCurrentSchedule =
-      expectedSchedule !== undefined && Math.abs(loggedSchedule - expectedSchedule) <= 60_000;
+  return medications.map((medication) => {
+    const days = normalizeMedicationDays(medication.scheduled_days ?? DEFAULT_MEDICATION_DAYS);
+    const occurrences = getMedicationOccurrences(
+      medication.scheduled_date,
+      medication.scheduled_time.slice(0, 5),
+      days,
+      now,
+      3
+    );
+    const occurrence = occurrences[0];
+    const status = occurrence ? getOccurrenceStatus(logs, medication.id, occurrence.iso) : 'pending';
 
-    if (belongsToCurrentSchedule && !latestStatus.has(log.medication_id)) {
-      latestStatus.set(log.medication_id, log.status);
-    }
-  }
-
-  return medications.map((medication) => ({
-    id: String(medication.id),
-    name: medication.name,
-    dose: medication.dose,
-    date: medication.scheduled_date,
-    time: medication.scheduled_time.slice(0, 5),
-    status: latestStatus.get(medication.id) === 'taken' ? 'Tomado' : 'Pendiente',
-  }));
+    return {
+      id: String(medication.id),
+      name: medication.name,
+      dose: medication.dose,
+      date: medication.scheduled_date,
+      nextDate: occurrence?.date ?? medication.scheduled_date,
+      time: medication.scheduled_time.slice(0, 5),
+      days,
+      status: status === 'taken' ? 'Tomado' : 'Pendiente',
+    };
+  });
 }
 
-function scheduledDateTimeToIso(date: string, time: string) {
-  return new Date(`${date}T${time}:00-03:00`).toISOString();
+function getOccurrenceStatus(logs: MedicationLogRow[], medicationId: number, iso: string) {
+  const expectedSchedule = new Date(iso).getTime();
+  const matchingLog = logs.find(
+    (log) =>
+      log.medication_id === medicationId &&
+      Math.abs(new Date(log.scheduled_for).getTime() - expectedSchedule) <= 60_000
+  );
+
+  return matchingLog?.status ?? 'pending';
 }
 
 function parseMedicationId(id: string) {

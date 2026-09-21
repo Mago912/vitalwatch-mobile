@@ -378,7 +378,7 @@ function MedicationView({
       <Text style={styles.green}>
         LISTO {index + 1}/{total}
       </Text>
-      <Text style={styles.dimText}>{formatDate(medication.date)}</Text>
+      <Text style={styles.dimText}>{formatDate(medication.nextDate || medication.date)}</Text>
       <Text style={styles.medicationTime}>{medication.time}</Text>
       <Text adjustsFontSizeToFit numberOfLines={1} style={styles.whiteText}>
         {medication.name}
