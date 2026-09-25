@@ -110,3 +110,75 @@ La imagen escrita en la placa fue verificada por `esptool` con
   de seguridad y sensibilidad, no como aceptación del rendimiento sostenido.
 - La aceptación clínica y los límites médicos requieren un protocolo separado,
   sujetos suficientes y equipo de referencia certificado.
+
+## Aceptación física nueva del 25-09-2026
+
+Se cargó la imagen RESEARCH en el mismo ESP32 clásico mediante el cargador ROM,
+a 57.600 baudios, sin stub ni compresión y escribiendo sólo la aplicación en
+`0x10000`. La escritura de 1.186.608 bytes terminó al 100 % con
+`Hash of data verified`.
+
+El binario recompilado y efectivamente escrito tuvo SHA-256
+`F12E08EB983F50BD8245092FB93C48966FFA9F4E4BD3A878E9A79BC4B6A5FAFB`.
+Este hash no coincide con el binario histórico documentado antes de la
+transferencia entre computadoras; por trazabilidad se conserva el hash real de
+la imagen probada y no se afirma equivalencia byte a byte.
+
+El arranque físico confirmó:
+
+- `VitalWatch VW-BIOSYS 1.0.16`;
+- `VW-SYS 0.9.9`;
+- `VW-BIO 0.7.0`;
+- `MAX30102 PART_ID=0x15`.
+
+`PPG-DUAL-CHANNEL-A` está configurado en el código, pero esta compilación no lo
+emitió como línea independiente durante el arranque observado. La salida CSV y
+el modo `BIO_RESEARCH_MODE=1` sí quedaron confirmados físicamente.
+
+### Artefactos inmutables
+
+| Artefacto | SHA-256 |
+|---|---|
+| `20260925-112619-dedo-quieto-dual-channel-a-toma-1.csv` | `EDB7C809B1E34D49878A78B83497D3A205505FAE77DA7EA48F2716997540F52A` |
+| `20260925-112619-dedo-quieto-dual-channel-a-toma-1.json` | `B2F87433183632C251D59B5077D5ED549736F047D2BBAF35642B10A8CBFFC5CA` |
+
+La captura y sus metadatos originales no se modificaron después de calcular
+estos hashes. El análisis estructurado separado está en
+`20260925-112619-dedo-quieto-dual-channel-a-toma-1-acceptance.json`.
+
+### Puerta de aceptación
+
+| Criterio | Resultado | Estado |
+|---|---:|---|
+| Registros | 2.251 | PASS |
+| Filas descartadas | 0 | PASS |
+| Deltas consecutivos | 2.250 de 2.250 a 40.000 us | PASS |
+| `suspected_drops` / muestras faltantes | 0 / 0 | PASS |
+| Mayor tramo `VALID` | 0 ms | **FAIL** |
+| `VALID` con movimiento, transición óptica o tiempo inválido | 0 | Sin publicación `VALID` |
+| Contribución fusionada rojo/IR en cada `VALID` | No evaluable: hubo 0 `VALID` | FAIL global |
+
+### Diagnóstico de la irregularidad
+
+La señal no falló por ausencia de contacto, SNR ni pérdida temporal. Se
+registraron 83 candidatos rojos, 88 infrarrojos, 77 pulsos fusionados y 69 IBI.
+Sin embargo, los IBI aceptados cubrieron de 340 a 1.600 ms. El firmware marcó
+`QR_IBI_INCONSISTENT` durante 886 filas y nunca entró en
+`TECHNICALLY_VALID`.
+
+También aparecieron dos transitorios ópticos, a los 23,08 s y 37,72 s, con sus
+cuarentenas y recalibraciones correspondientes. No hubo `QR_HIGH_MOTION`,
+`QR_TIMING_INVALID`, muestras faltantes ni pérdidas sospechadas.
+
+Hipótesis rechazada: **la supresión no máxima de 320 ms y la fusión rojo/IR
+bastan para producir IBI coherentes en una toma real con dedo quieto**. La
+captura muestra máximos secundarios fusionados y pulsos omitidos que alternan
+intervalos cortos y largos, aunque ambos canales tengan SNR suficiente.
+
+### Decisión
+
+**REJECTED — KEEP RESEARCH.** BIOSYS 1.0.16 continúa como candidato de
+investigación. No se cargó ni se liberó la imagen normal. La siguiente
+corrección debe modificar una sola hipótesis de selección temporal y volver a
+ejecutar controles negativos, replays y una nueva toma física antes de decidir
+la liberación.
