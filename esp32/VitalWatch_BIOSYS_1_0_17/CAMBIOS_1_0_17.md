@@ -2,7 +2,7 @@
 
 Fecha: 2026-09-25
 
-Estado: **RESEARCH - MIXED PHYSICAL RESULTS**
+Estado: **RESEARCH HYPOTHESIS ACCEPTED - PRODUCT AUTOGAIN PENDING**
 
 ## Hipótesis única
 
@@ -103,6 +103,29 @@ el contacto óptico variable de una limitación del detector.
 
 Evidencia de la réplica:
 `measurements/biosys-1.0.17/20260925-161447-dedo-quieto-led-18-a-toma-2-acceptance.json`.
+
+## Réplica con contacto estabilizado
+
+La tercera toma se realizó con protoboard, antebrazo y mano apoyados. Obtuvo:
+
+- 2.250 registros y cero descartados;
+- 518 muestras `VALID` y 14.520 ms continuos `VALID`;
+- 104 candidatos rojos, 104 infrarrojos y 97 latidos fusionados;
+- cero transitorios ópticos, cuarentenas, movimiento alto o tiempo inválido;
+- frecuencia técnicamente aceptada entre 71,43 y 96,77 lpm, mediana 75 lpm;
+- de 6 a 8 latidos rojo/IR sincronizados en cada muestra `VALID`.
+
+Dos de tres tomas superaron la puerta de 10 segundos. La toma fallida demostró
+que las barreras rechazan el contacto óptico inestable sin inventar valores.
+La hipótesis de potencia `0x18` queda aceptada para investigación, con la
+estabilidad mecánica del contacto como requisito explícito.
+
+Antes de cambiar el perfil de producto se probará una autoganancia que comience
+en `0x18`. Esto conserva margen para diferencias de piel y montaje sin relajar
+los criterios de validez.
+
+Evidencia de la tercera toma:
+`measurements/biosys-1.0.17/20260925-161927-dedo-apoyado-led-18-a-toma-3-acceptance.json`.
 
 `VALID` sólo expresa coherencia técnica interna. No constituye validación
 clínica, diagnóstico médico ni comparación con un instrumento certificado.

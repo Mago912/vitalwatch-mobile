@@ -74,7 +74,10 @@ criterios de validez.
   32.720 ms continuos `VALID`.
 - Captura LED `0x18` toma 2: **FAIL**, 2.250 registros, 0 descartados y sólo
   680 ms continuos `VALID` por inestabilidad óptica.
-- Hipótesis `PPG-LED-18-A`: **resultado mixto; conservar en investigación**.
+- Captura LED `0x18` toma 3 con contacto estabilizado: **PASS**, 2.250
+  registros, 0 descartados y 14.520 ms continuos `VALID`.
+- Hipótesis `PPG-LED-18-A`: **aceptada para investigación; autoganancia de
+  producto pendiente**.
 - `VALID` significa validez técnica interna; no es validación clínica.
 
 ## Exclusiones

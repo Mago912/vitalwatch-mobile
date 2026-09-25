@@ -1,0 +1,73 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.17",
+  "mode": "BIO_RESEARCH_MODE=1",
+  "configuredExperimentId": "PPG-LED-18-A",
+  "capture": {
+    "csvFile": "20260925-161927-dedo-apoyado-led-18-a-toma-3.csv",
+    "csvSha256": "DC75D08627BBBB77D99AB4D4D7F09C0EDFE3B9E8FE0AA16EE76D3C10BFFF30EE",
+    "metadataFile": "20260925-161927-dedo-apoyado-led-18-a-toma-3.json",
+    "metadataSha256": "9A37F2C819F1E202253815C317E466FE48FEEC7480A6FD548E52DDF106336BD2",
+    "requestedDurationSeconds": 90,
+    "sessionId": 7,
+    "records": 2250,
+    "discardedRecords": 0
+  },
+  "loadedBinary": {
+    "sizeBytes": 1186608,
+    "sha256": "7C0D4FB0F7FB5CBEED44C5FF6E4E356C3BFEF70FE4A24389AFF224BF144BC93D",
+    "writeAddress": "0x10000",
+    "writeVerified": true
+  },
+  "timing": {
+    "consecutivePairs": 2249,
+    "badDeltaCount": 0,
+    "minimumDeltaUs": 40000,
+    "maximumDeltaUs": 40000,
+    "suspectedDrops": 0,
+    "missingSamples": 0
+  },
+  "signal": {
+    "ledAmplitude": 24,
+    "redAverage": 75543.51,
+    "irAverage": 81315.11,
+    "redCandidates": 104,
+    "irCandidates": 104,
+    "fusedBeats": 97,
+    "ibiSamples": 91,
+    "minimumIbiMs": 380,
+    "medianIbiMs": 760,
+    "maximumIbiMs": 1580,
+    "ibiInconsistentRows": 959,
+    "channelMismatchRows": 65,
+    "opticalTransientRows": 0,
+    "highMotionRows": 0,
+    "timingInvalidRows": 0,
+    "quarantineEntries": 0,
+    "recalibrationEntries": 0,
+    "minimumAccelerationMagnitudeG": 0.924,
+    "maximumAccelerationMagnitudeG": 0.993
+  },
+  "technicalValidity": {
+    "validSamples": 518,
+    "longestValidMs": 14520,
+    "validBpmMinimum": 71.43,
+    "validBpmMedian": 75.00,
+    "validBpmMaximum": 96.77,
+    "minimumSynchronizedCountDuringValid": 6,
+    "maximumSynchronizedCountDuringValid": 8,
+    "validWithHighMotion": 0,
+    "validWithOpticalTransient": 0,
+    "validWithTimingInvalid": 0,
+    "validWithInsufficientDualChannelEvidence": 0,
+    "redIrFusedContributionForEveryValid": true
+  },
+  "acceptance": {
+    "passed": true,
+    "verdict": "REPLICATION_PASSED_CONTACT_CONTROLLED",
+    "acceptedHypothesis": "LED 0x18 permite validez tecnica reproducible cuando el contacto optico permanece estable.",
+    "safetyObservation": "La toma inestable anterior fue rechazada por cuarentena y desacuerdo rojo/IR sin fabricar valores validos.",
+    "nextStep": "Probar autoganancia iniciada en 0x18 antes de trasladar esta potencia al perfil de producto."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}

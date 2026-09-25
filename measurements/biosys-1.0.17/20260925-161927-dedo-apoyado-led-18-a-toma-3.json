@@ -1,0 +1,14 @@
+{
+    "firmware":  "BIOSYS 1.0.17",
+    "mode":  "BIO_RESEARCH_MODE=1",
+    "label":  "dedo-apoyado-led-18-a-toma-3",
+    "port":  "COM3",
+    "baudRate":  460800,
+    "requestedDurationSeconds":  90,
+    "startedAt":  "2026-09-25T16:19:27.8564607-03:00",
+    "finishedAt":  "2026-09-25T16:21:00.1639100-03:00",
+    "researchRecords":  2250,
+    "discardedRecords":  0,
+    "csvFile":  "20260925-161927-dedo-apoyado-led-18-a-toma-3.csv",
+    "note":  "Datos experimentales. No usar para diagnostico medico."
+}
