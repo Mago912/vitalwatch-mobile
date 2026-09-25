@@ -1,0 +1,4 @@
+[REPLAY] RESET_OK
+[INFO][PPG] sesion=3 contacto confirmado; estabilizando
+[INFO][PPG] Estabilizacion completa; midiendo
+[SELFTEST] INVALID_SEQUENCE_GAP PASS status=5 bpm=nan reasons=0x0020 longest_valid_ms=0

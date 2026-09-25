@@ -19,7 +19,7 @@ const APPENDED_DIAGNOSTICS = [
 
 test('appends the dual-channel diagnostics to research output and capture schema', () => {
   const research = fs.readFileSync(path.join(
-    ROOT, 'esp32', 'VitalWatch_BIOSYS_1_0_16', 'BioResearch.cpp',
+    ROOT, 'esp32', 'VitalWatch_BIOSYS_1_0_17', 'BioResearch.cpp',
   ), 'utf8');
   const capture = fs.readFileSync(path.join(ROOT, 'scripts', 'capture-biosys-research.ps1'), 'utf8');
   for (const column of APPENDED_DIAGNOSTICS) {
@@ -85,7 +85,7 @@ test('rejects malformed replay summaries', () => {
 
 test('physical CODEX reproduction datasets meet the approved safety barriers', () => {
   const evidence = JSON.parse(fs.readFileSync(path.join(
-    ROOT, 'measurements', 'biosys-1.0.16', 'replay-results.json',
+    ROOT, 'measurements', 'biosys-1.0.17', 'replay-results.json',
   ), 'utf8'));
   const { noFinger, stableTimeline, led35Stable, contactChange } = evidence.datasets;
 

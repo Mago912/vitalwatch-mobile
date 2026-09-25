@@ -1,0 +1,2 @@
+[REPLAY] RESET_OK
+[SELFTEST] MOTION_SEVERE PASS state=3 status=3 reasons=0x0080 remaining_ms=4000 reset=1

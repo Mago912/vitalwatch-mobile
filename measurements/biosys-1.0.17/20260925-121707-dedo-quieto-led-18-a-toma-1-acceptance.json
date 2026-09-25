@@ -1,0 +1,76 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.17",
+  "mode": "BIO_RESEARCH_MODE=1",
+  "configuredExperimentId": "PPG-LED-18-A",
+  "experimentStartupLineObserved": false,
+  "capture": {
+    "csvFile": "20260925-121707-dedo-quieto-led-18-a-toma-1.csv",
+    "csvSha256": "4566DFBFAA700343F56FB2D396B8F37C3B38E7C5E23ACB9B2729D73DF7440599",
+    "metadataFile": "20260925-121707-dedo-quieto-led-18-a-toma-1.json",
+    "metadataSha256": "B5A76D9CE39827B0092BBA164330F1F7170E8BA9B935DC8D0D7C62B0B32E0B94",
+    "requestedDurationSeconds": 90,
+    "records": 2250,
+    "discardedRecords": 0
+  },
+  "loadedBinary": {
+    "sizeBytes": 1186608,
+    "sha256": "7C0D4FB0F7FB5CBEED44C5FF6E4E356C3BFEF70FE4A24389AFF224BF144BC93D",
+    "writeAddress": "0x10000",
+    "writeVerified": true
+  },
+  "startup": {
+    "biosys": "1.0.17",
+    "sys": "0.9.9",
+    "bio": "0.7.1",
+    "max30102PartId": "0x15"
+  },
+  "timing": {
+    "consecutivePairs": 2249,
+    "badDeltaCount": 0,
+    "minimumDeltaUs": 40000,
+    "maximumDeltaUs": 40000,
+    "suspectedDrops": 0,
+    "missingSamples": 0
+  },
+  "signal": {
+    "ledAmplitude": 24,
+    "redAverage": 74346.84,
+    "irAverage": 79610.70,
+    "redCandidates": 83,
+    "irCandidates": 82,
+    "fusedBeats": 78,
+    "ibiSamples": 74,
+    "minimumIbiMs": 400,
+    "medianIbiMs": 800,
+    "maximumIbiMs": 1520,
+    "ibiInconsistentRows": 521,
+    "channelMismatchRows": 66,
+    "opticalTransientRows": 328,
+    "highMotionRows": 0,
+    "timingInvalidRows": 0,
+    "quarantineEntries": 2,
+    "recalibrationEntries": 3
+  },
+  "technicalValidity": {
+    "validSamples": 818,
+    "longestValidMs": 32720,
+    "validBpmMinimum": 69.77,
+    "validBpmMedian": 75.00,
+    "validBpmMaximum": 78.95,
+    "minimumSynchronizedCountDuringValid": 7,
+    "maximumSynchronizedCountDuringValid": 8,
+    "validWithHighMotion": 0,
+    "validWithOpticalTransient": 0,
+    "validWithTimingInvalid": 0,
+    "validWithInsufficientDualChannelEvidence": 0,
+    "redIrFusedContributionForEveryValid": true
+  },
+  "acceptance": {
+    "passed": true,
+    "verdict": "ACCEPTED_RESEARCH_HYPOTHESIS",
+    "acceptedHypothesis": "Reducir ambos LED de investigacion de 0x35 a 0x18 permite sostener al menos 10 segundos de validez tecnica con el mismo detector, fusion, barreras y MPU de BIOSYS 1.0.16.",
+    "nextStep": "Repetir la captura para comprobar reproducibilidad antes de trasladar la potencia optica al perfil de producto."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}

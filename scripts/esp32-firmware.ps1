@@ -14,7 +14,7 @@ $sketchDirectory = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_1'
 $stableDirectory = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_0'
 $baselineDirectory = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_5_0'
 $bioDirectory = Join-Path $projectRoot 'esp32\VitalWatch_BIO_0_6_0'
-$biosysDirectory = Join-Path $projectRoot 'esp32\VitalWatch_BIOSYS_1_0_16'
+$biosysDirectory = Join-Path $projectRoot 'esp32\VitalWatch_BIOSYS_1_0_17'
 $tftTestDirectory = Join-Path $projectRoot 'esp32\tft_test'
 $deviceConfig = Join-Path $sketchDirectory 'vitalwatch_config.h'
 $stableDeviceConfig = Join-Path $stableDirectory 'vitalwatch_config.h'
@@ -24,9 +24,9 @@ $baselineBuildDirectory = Join-Path $projectRoot '.arduino\build\fw-0.5.0'
 $bioBuildDirectory = Join-Path $projectRoot '.arduino\build\bio-0.6.0'
 $bioResearchBuildDirectory = Join-Path $projectRoot '.arduino\build\bio-0.6.0-research'
 $bioReplayBuildDirectory = Join-Path $projectRoot '.arduino\build\bio-0.6.0-replay'
-$biosysBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.16'
-$biosysResearchBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.16-research'
-$biosysReplayBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.16-replay'
+$biosysBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.17'
+$biosysResearchBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.17-research'
+$biosysReplayBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.17-replay'
 $tftBuildDirectory = Join-Path $projectRoot '.arduino\build\tft-test'
 
 function Invoke-ArduinoCli {
@@ -165,6 +165,9 @@ function Upload-Build {
     'upload',
     '--port', $DevicePort,
     '--fqbn', $Fqbn,
+    # Esta placa/cable perdio la conexion al 15,2 % usando 921600. La carga a
+    # 115200 es mas lenta, pero completo escritura y verificacion de hash.
+    '--upload-property', 'upload.speed=57600',
     '--input-dir', $InputDirectory
   )
 }

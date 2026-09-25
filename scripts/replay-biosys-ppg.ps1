@@ -21,7 +21,7 @@ if ([string]::IsNullOrWhiteSpace($InputCsv) -and
 $resolvedInput = $null
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
   $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-  $OutputPath = Join-Path $projectRoot "measurements\biosys-1.0.16\$stamp-replay.log"
+  $OutputPath = Join-Path $projectRoot "measurements\biosys-1.0.17\$stamp-replay.log"
 } elseif (-not [System.IO.Path]::IsPathRooted($OutputPath)) {
   $OutputPath = Join-Path $projectRoot $OutputPath
 }

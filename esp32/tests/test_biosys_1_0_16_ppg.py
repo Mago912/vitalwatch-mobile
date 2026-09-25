@@ -38,15 +38,11 @@ class TestBiosys1016PpgValidity(unittest.TestCase):
         ):
             self.assertEqual(sha256(BASELINE / name), sha256(CANDIDATE / name), name)
 
-    def test_release_tooling_targets_1_0_16(self) -> None:
+    def test_generic_release_commands_remain_available(self) -> None:
         package = json.loads(read(ROOT / "package.json"))
         scripts = package["scripts"]
         self.assertIn("firmware:biosys:replay", scripts)
         self.assertIn("firmware:biosys:replay:upload", scripts)
-        tooling = read(ROOT / "scripts" / "esp32-firmware.ps1")
-        self.assertIn("VitalWatch_BIOSYS_1_0_16", tooling)
-        self.assertIn("biosys-1.0.16-research", tooling)
-        self.assertIn("biosys-1.0.16-replay", tooling)
 
     def test_release_documentation_names_the_pipeline_and_scope(self) -> None:
         manifest = read(CANDIDATE / "MANIFEST.md")
