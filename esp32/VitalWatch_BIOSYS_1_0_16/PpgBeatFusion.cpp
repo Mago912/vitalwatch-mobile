@@ -9,6 +9,7 @@ void PpgBeatFusion::reset(){
   pendingRed_=pendingIr_=false;
   red_={};
   ir_={};
+  redObservedAtUs_=irObservedAtUs_=0;
   lastFusedUs_=0;
   memset(ibis_,0,sizeof(ibis_));
   ibiCount_=ibiPosition_=0;
@@ -75,19 +76,19 @@ PpgFusedBeat PpgBeatFusion::resultWithMetrics(const PpgFusedBeat &source) const{
 PpgFusedBeat PpgBeatFusion::update(const PpgChannelObservation &red,
                                    const PpgChannelObservation &ir){
   PpgFusedBeat result={0,0,0,0,false,false};
-  const uint64_t now=max(red.timestampUs,ir.timestampUs);
-  if(pendingRed_&&now>red_.timestampUs&&
-     now-red_.timestampUs>PpgFusionConfig::MATCH_WINDOW_US){
+  const uint64_t now=max(red.observedAtUs,ir.observedAtUs);
+  if(pendingRed_&&now>redObservedAtUs_&&
+     now-redObservedAtUs_>PpgFusionConfig::MATCH_WINDOW_US){
     pendingRed_=false;
     recordSynchronization(false);
   }
-  if(pendingIr_&&now>ir_.timestampUs&&
-     now-ir_.timestampUs>PpgFusionConfig::MATCH_WINDOW_US){
+  if(pendingIr_&&now>irObservedAtUs_&&
+     now-irObservedAtUs_>PpgFusionConfig::MATCH_WINDOW_US){
     pendingIr_=false;
     recordSynchronization(false);
   }
-  if(red.candidate&&!red.artifact){red_=red;pendingRed_=true;}
-  if(ir.candidate&&!ir.artifact){ir_=ir;pendingIr_=true;}
+  if(red.candidate&&!red.artifact){red_=red;redObservedAtUs_=now;pendingRed_=true;}
+  if(ir.candidate&&!ir.artifact){ir_=ir;irObservedAtUs_=now;pendingIr_=true;}
   if(!pendingRed_||!pendingIr_)return resultWithMetrics(result);
 
   const uint64_t difference=absoluteDifference(red_.timestampUs,ir_.timestampUs);

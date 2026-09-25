@@ -5,6 +5,7 @@ param(
   [ValidateSet('', 'CHANNEL_WEAK', 'CHANNEL_OUTLIER', 'FUSION_PAIRED', 'FUSION_RED_ONLY', 'FUSION_IR_ONLY', 'FUSION_TOO_FAR', 'FUSION_LONG_GAP', 'FUSION_ROLLOVER', 'OPTICAL_7_PERCENT', 'OPTICAL_9_PERCENT', 'MOTION_ONE_MODERATE', 'MOTION_THREE_MODERATE', 'MOTION_SEVERE', 'MOTION_SATURATED', 'RECOVERY_RESTART', 'VALID_STABLE_SYNTHETIC', 'INVALID_TIMING_FALSE', 'INVALID_SEQUENCE_GAP', 'INVALID_TIME_REVERSE', 'INVALID_CHANNEL_RATIO', 'INVALID_SNR', 'VALID_SNR_BOUNDARY', 'RESET_AFTER_VALID')]
   [string]$SelfTest = '',
   [bool]$ExpectValid = $true,
+  [switch]$AllowEitherValidity,
   [string]$OutputPath,
   [int]$BaudRate = 115200,
   [int]$TimeoutSeconds = 45
@@ -143,7 +144,7 @@ try {
     throw 'No se recibio REPLAY_RESULT antes del timeout.'
   }
 
-  $pattern = '^\[REPLAY_RESULT\] rows=(\d+) rejected=(\d+) fused=(\d+) valid=(\d+) first_valid_us=(\d+) longest_valid_ms=(\d+) bpm_min=(nan|[-+]?\d+(?:\.\d+)?) bpm_max=(nan|[-+]?\d+(?:\.\d+)?)$'
+  $pattern = '^\[REPLAY_RESULT\] rows=(\d+) rejected=(\d+) fused=(\d+) valid=(\d+) first_valid_us=(\d+) longest_valid_ms=(\d+) bpm_min=(nan|[-+]?\d+(?:\.\d+)?) bpm_max=(nan|[-+]?\d+(?:\.\d+)?) bpm_median=(nan|[-+]?\d+(?:\.\d+)?) quarantine_count=(\d+) recalibration_count=(\d+) unsafe_valid=(\d+) single_channel_valid=(\d+) valid_during_quarantine=(\d+)$'
   $match = [regex]::Match($resultLine, $pattern, 'IgnoreCase')
   if (-not $match.Success) { throw "REPLAY_RESULT malformado: $resultLine" }
   $accepted = [uint32]$match.Groups[1].Value
@@ -151,8 +152,10 @@ try {
   $valid = [uint32]$match.Groups[4].Value
   if ($accepted -ne $sent) { throw "Firmware acepto $accepted de $sent filas enviadas." }
   if ($rejected -ne 0) { throw "Firmware rechazo $rejected filas." }
-  if ($ExpectValid -and $valid -eq 0) { throw 'Se esperaba FC valida y el replay produjo valid=0.' }
-  if (-not $ExpectValid -and $valid -ne 0) { throw "Se esperaba reproducir valid=0 y se obtuvo valid=$valid." }
+  if (-not $AllowEitherValidity) {
+    if ($ExpectValid -and $valid -eq 0) { throw 'Se esperaba FC valida y el replay produjo valid=0.' }
+    if (-not $ExpectValid -and $valid -ne 0) { throw "Se esperaba reproducir valid=0 y se obtuvo valid=$valid." }
+  }
 
   $outputDirectory = Split-Path -Parent $OutputPath
   [System.IO.Directory]::CreateDirectory($outputDirectory) | Out-Null

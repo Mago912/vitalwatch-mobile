@@ -14,9 +14,20 @@ namespace {
 char line[192];
 size_t lineLength=0;
 uint32_t accepted=0,rejected=0,validSamples=0;
+uint32_t fusedBeats=0,quarantineCount=0,recalibrationCount=0;
+uint32_t unsafeValid=0,singleChannelValid=0,validDuringQuarantine=0;
 uint64_t firstValidUs=0,validSpanStartUs=0;
 uint32_t longestValidMs=0;
 float bpmMin=NAN,bpmMax=NAN;
+uint16_t bpmHistogram[191]={0};
+uint32_t bpmHistogramCount=0;
+uint8_t previousDetectorState=255;
+uint32_t statusCounts[7]={0};
+uint16_t reasonsObserved=0;
+uint8_t maxIbiCount=0,maxSynchronizedCount=0,maxSynchronizationWindow=0;
+float maxRedSnr=0,maxIrSnr=0,minFusionBpm=NAN,maxFusionBpm=NAN;
+float maxMadRatio=0;
+uint16_t maxIbiRangeMs=0;
 
 uint32_t weakWave(uint32_t index){
   static const int8_t shape[25]={
@@ -55,7 +66,10 @@ bool selfTestChannelOutlier(uint16_t &candidates,uint16_t &artifacts,
   for(uint32_t index=0;index<60;++index)
     detector.update(80000UL,(uint64_t)index*40000ULL);
   for(uint8_t pulse=0;pulse<15;++pulse){
-    const uint16_t amplitude=pulse==9?840:120;
+    // El FIR atenúa el máximo sintético. Diez veces la amplitud nominal
+    // garantiza que este fixture pruebe el límite productivo de >6x la
+    // mediana fusionada, sin modificar el umbral del detector.
+    const uint16_t amplitude=pulse==9?1200:120;
     for(uint8_t phase=0;phase<25;++phase){
       const uint32_t index=60UL+(uint32_t)pulse*25UL+phase;
       const PpgChannelObservation observation=detector.update(
@@ -73,7 +87,7 @@ bool selfTestChannelOutlier(uint16_t &candidates,uint16_t &artifacts,
 }
 
 PpgChannelObservation fusionObservation(uint64_t timestampUs,bool present=true){
-  return {timestampUs,0,100,10,10,true,present,false};
+  return {timestampUs,timestampUs,0,100,10,10,true,present,false};
 }
 
 bool runFusionSelfTest(const char *name,PpgFusedBeat &result,
@@ -132,7 +146,7 @@ PpgGateDecision gateUpdate(PpgValidityGate &gate,const PPGSample &sample,
 }
 
 PpgChannelObservation validityObservation(uint64_t timestampUs,float snr){
-  return {timestampUs,0,100,10,snr,true,false,false};
+  return {timestampUs,timestampUs,0,100,10,snr,true,false,false};
 }
 
 PpgFusedBeat validityBeat(uint64_t timestampUs,uint8_t synchronizedCount=6,
@@ -349,34 +363,116 @@ void runSelfTest(const char *name){
 
 void resetSummary(){
   accepted=rejected=validSamples=0;
+  fusedBeats=quarantineCount=recalibrationCount=0;
+  unsafeValid=singleChannelValid=validDuringQuarantine=0;
   firstValidUs=validSpanStartUs=0;
   longestValidMs=0;
   bpmMin=bpmMax=NAN;
+  memset(bpmHistogram,0,sizeof(bpmHistogram));bpmHistogramCount=0;
+  memset(statusCounts,0,sizeof(statusCounts));reasonsObserved=0;
+  maxIbiCount=maxSynchronizedCount=maxSynchronizationWindow=0;
+  maxRedSnr=maxIrSnr=maxMadRatio=0;minFusionBpm=maxFusionBpm=NAN;
+  maxIbiRangeMs=0;
+  previousDetectorState=255;
+}
+
+float medianSummaryBpm(){
+  if(bpmHistogramCount==0)return NAN;
+  const uint32_t target=bpmHistogramCount/2;
+  uint32_t accumulated=0;
+  for(uint16_t bpm=0;bpm<=190;++bpm){
+    accumulated+=bpmHistogram[bpm];
+    if(accumulated>target)return (float)bpm;
+  }
+  return NAN;
 }
 
 void observeResult(const PPGSample &sample){
-  const HeartRateResult &result=PPGService::heartRateForTelemetry();
+  const HeartRateResult &result=PPGService::heartRateInstant();
+  const PPGDiagnostics &diagnostics=PPGService::diagnostics();
+  const uint8_t status=(uint8_t)result.status;
+  if(status<7)++statusCounts[status];
+  reasonsObserved|=result.qualityReasons;
+  maxIbiCount=max(maxIbiCount,diagnostics.ibiCount);
+  maxSynchronizedCount=max(maxSynchronizedCount,diagnostics.synchronizedCount);
+  maxSynchronizationWindow=max(maxSynchronizationWindow,
+    diagnostics.synchronizationWindowSize);
+  maxRedSnr=max(maxRedSnr,diagnostics.redSnr);
+  maxIrSnr=max(maxIrSnr,diagnostics.irSnr);
+  if(isfinite(diagnostics.fusionBpm)){
+    if(isnan(minFusionBpm)||diagnostics.fusionBpm<minFusionBpm)
+      minFusionBpm=diagnostics.fusionBpm;
+    if(isnan(maxFusionBpm)||diagnostics.fusionBpm>maxFusionBpm)
+      maxFusionBpm=diagnostics.fusionBpm;
+  }
+  if(isfinite(diagnostics.ibiMadRatio))maxMadRatio=max(maxMadRatio,
+    diagnostics.ibiMadRatio);
+  maxIbiRangeMs=max(maxIbiRangeMs,diagnostics.ibiRangeMs);
+  if(diagnostics.peakFused)++fusedBeats;
+  if(diagnostics.detectorState==(uint8_t)PpgDetectorState::QUARANTINED&&
+     previousDetectorState!=(uint8_t)PpgDetectorState::QUARANTINED)++quarantineCount;
+  if(previousDetectorState==(uint8_t)PpgDetectorState::QUARANTINED&&
+     diagnostics.detectorState==(uint8_t)PpgDetectorState::CALIBRATING)
+    ++recalibrationCount;
+  previousDetectorState=diagnostics.detectorState;
   const bool valid=result.status==HeartRateStatus::VALID &&
     result.timestampUs==sample.sampleTimeUs && isfinite(result.bpm);
   if(!valid){validSpanStartUs=0;return;}
 
   ++validSamples;
+  const uint16_t unsafeMask=QR_HIGH_MOTION|QR_OPTICAL_TRANSIENT|
+    QR_TIMING_INVALID|QR_MISSING_SAMPLES;
+  if(!sample.timingValid||(result.qualityReasons&unsafeMask)!=0)++unsafeValid;
+  if(diagnostics.synchronizedCount<PpgGateConfig::MIN_SYNCHRONIZED)
+    ++singleChannelValid;
+  if(diagnostics.detectorState==(uint8_t)PpgDetectorState::QUARANTINED)
+    ++validDuringQuarantine;
   if(firstValidUs==0)firstValidUs=sample.sampleTimeUs;
   if(validSpanStartUs==0)validSpanStartUs=sample.sampleTimeUs;
   const uint32_t spanMs=(uint32_t)((sample.sampleTimeUs-validSpanStartUs)/1000ULL);
   if(spanMs>longestValidMs)longestValidMs=spanMs;
   if(isnan(bpmMin)||result.bpm<bpmMin)bpmMin=result.bpm;
   if(isnan(bpmMax)||result.bpm>bpmMax)bpmMax=result.bpm;
+  const int rounded=(int)lroundf(result.bpm);
+  if(rounded>=0&&rounded<=190&&bpmHistogram[rounded]<UINT16_MAX){
+    ++bpmHistogram[rounded];++bpmHistogramCount;
+  }
 }
 
 void printSummary(){
   Serial.printf(
-    "[REPLAY_RESULT] rows=%lu rejected=%lu fused=0 valid=%lu first_valid_us=%llu longest_valid_ms=%lu ",
-    (unsigned long)accepted,(unsigned long)rejected,(unsigned long)validSamples,
+    "[REPLAY_DIAG] status_valid=%lu insufficient=%lu unstable=%lu low_quality=%lu no_contact=%lu timing_invalid=%lu sensor_error=%lu reasons_or=0x%04X max_ibi=%u max_sync=%u max_sync_window=%u max_red_snr=%.3f max_ir_snr=%.3f ",
+    (unsigned long)statusCounts[(uint8_t)HeartRateStatus::VALID],
+    (unsigned long)statusCounts[(uint8_t)HeartRateStatus::INSUFFICIENT_DATA],
+    (unsigned long)statusCounts[(uint8_t)HeartRateStatus::UNSTABLE],
+    (unsigned long)statusCounts[(uint8_t)HeartRateStatus::LOW_QUALITY],
+    (unsigned long)statusCounts[(uint8_t)HeartRateStatus::NO_CONTACT],
+    (unsigned long)statusCounts[(uint8_t)HeartRateStatus::TIMING_INVALID],
+    (unsigned long)statusCounts[(uint8_t)HeartRateStatus::SENSOR_ERROR],
+    (unsigned)reasonsObserved,(unsigned)maxIbiCount,
+    (unsigned)maxSynchronizedCount,(unsigned)maxSynchronizationWindow,
+    maxRedSnr,maxIrSnr
+  );
+  if(isfinite(minFusionBpm))Serial.printf(
+    "fusion_bpm_min=%.2f fusion_bpm_max=%.2f ",minFusionBpm,maxFusionBpm);
+  else Serial.print(F("fusion_bpm_min=nan fusion_bpm_max=nan "));
+  Serial.printf("max_mad_ratio=%.3f max_ibi_range_ms=%u\n",
+    maxMadRatio,(unsigned)maxIbiRangeMs);
+  Serial.printf(
+    "[REPLAY_RESULT] rows=%lu rejected=%lu fused=%lu valid=%lu first_valid_us=%llu longest_valid_ms=%lu ",
+    (unsigned long)accepted,(unsigned long)rejected,(unsigned long)fusedBeats,
+    (unsigned long)validSamples,
     (unsigned long long)firstValidUs,(unsigned long)longestValidMs
   );
-  if(validSamples==0)Serial.println(F("bpm_min=nan bpm_max=nan"));
-  else Serial.printf("bpm_min=%.2f bpm_max=%.2f\n",bpmMin,bpmMax);
+  if(validSamples==0)Serial.print(F("bpm_min=nan bpm_max=nan bpm_median=nan "));
+  else Serial.printf("bpm_min=%.2f bpm_max=%.2f bpm_median=%.2f ",
+    bpmMin,bpmMax,medianSummaryBpm());
+  Serial.printf(
+    "quarantine_count=%lu recalibration_count=%lu unsafe_valid=%lu single_channel_valid=%lu valid_during_quarantine=%lu\n",
+    (unsigned long)quarantineCount,(unsigned long)recalibrationCount,
+    (unsigned long)unsafeValid,(unsigned long)singleChannelValid,
+    (unsigned long)validDuringQuarantine
+  );
 }
 
 void processLine(){

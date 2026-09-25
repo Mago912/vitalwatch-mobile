@@ -1,0 +1,82 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "conclusion": "INDEPENDENTLY REPRODUCED",
+  "firmwareCandidate": "BIOSYS 1.0.16",
+  "detector": {
+    "firShortSamples": 7,
+    "firLongSamples": 20,
+    "nmsRadiusUs": 320000,
+    "thresholdFraction": 0.05,
+    "redIrMatchWindowUs": 120000
+  },
+  "datasets": {
+    "noFinger": {
+      "file": "measurements/biosys-1.0.15/20260924-191425-sin-dedo-led-range-a.csv",
+      "sha256": "68A60CFDF93E00FA14D018C970167D6B6CF97E75BA4629B5949D6536A33F4D96",
+      "rows": 500,
+      "result": {
+        "fused": 0,
+        "valid": 0,
+        "longestValidMs": 0,
+        "bpmMedian": null,
+        "quarantineCount": 0,
+        "recalibrationCount": 0,
+        "unsafeValid": 0,
+        "singleChannelValid": 0,
+        "validDuringQuarantine": 0
+      }
+    },
+    "stableTimeline": {
+      "file": "measurements/biosys-1.0.15/20260924-194014-dedo-quieto-timeline-a-toma-1.csv",
+      "sha256": "D8920392C7C2B51BACB70328321596278B78D51315B1BC49D37C4BAC66C1FCE1",
+      "rows": 2251,
+      "result": {
+        "fused": 93,
+        "valid": 390,
+        "longestValidMs": 12600,
+        "bpmMin": 83.33,
+        "bpmMax": 88.24,
+        "bpmMedian": 86.0,
+        "quarantineCount": 1,
+        "recalibrationCount": 1,
+        "unsafeValid": 0,
+        "singleChannelValid": 0,
+        "validDuringQuarantine": 0
+      }
+    },
+    "led35Stable": {
+      "file": "measurements/biosys-1.0.15/20260924-195431-dedo-quieto-led-35-timeline-a-toma-1.csv",
+      "sha256": "F59C90CD88C80594BD540C003B8A352A4CBC2938FFC0FF54EBF5AF3EC68EF6A0",
+      "rows": 2252,
+      "result": {
+        "fused": 98,
+        "valid": 21,
+        "longestValidMs": 400,
+        "bpmMin": 78.95,
+        "bpmMax": 78.95,
+        "bpmMedian": 79.0,
+        "quarantineCount": 0,
+        "recalibrationCount": 0,
+        "unsafeValid": 0,
+        "singleChannelValid": 0,
+        "validDuringQuarantine": 0
+      }
+    },
+    "contactChange": {
+      "file": "measurements/biosys-1.0.15/20260924-195710-dedo-quieto-led-35-timeline-a-toma-2.csv",
+      "sha256": "2FB5E581DE1247BA5DA287E8FE6F999245CA1B4765A5516E7B1F7D4DFDE1E716",
+      "rows": 2250,
+      "result": {
+        "fused": 46,
+        "valid": 0,
+        "longestValidMs": 0,
+        "bpmMedian": null,
+        "quarantineCount": 4,
+        "recalibrationCount": 4,
+        "unsafeValid": 0,
+        "singleChannelValid": 0,
+        "validDuringQuarantine": 0
+      }
+    }
+  }
+}

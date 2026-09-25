@@ -46,6 +46,8 @@ class PpgBeatFusion {
   bool pendingIr_;
   PpgChannelObservation red_;
   PpgChannelObservation ir_;
+  uint64_t redObservedAtUs_;
+  uint64_t irObservedAtUs_;
   uint64_t lastFusedUs_;
   uint16_t ibis_[PpgFusionConfig::IBI_CAPACITY];
   uint8_t ibiCount_;

@@ -1,4 +1,4 @@
-const RESULT_PATTERN = /^\[REPLAY_RESULT\]\s+rows=(\d+)\s+rejected=(\d+)\s+fused=(\d+)\s+valid=(\d+)\s+first_valid_us=(\d+)\s+longest_valid_ms=(\d+)\s+bpm_min=(nan|[-+]?\d+(?:\.\d+)?)\s+bpm_max=(nan|[-+]?\d+(?:\.\d+)?)$/i;
+const RESULT_PATTERN = /^\[REPLAY_RESULT\]\s+rows=(\d+)\s+rejected=(\d+)\s+fused=(\d+)\s+valid=(\d+)\s+first_valid_us=(\d+)\s+longest_valid_ms=(\d+)\s+bpm_min=(nan|[-+]?\d+(?:\.\d+)?)\s+bpm_max=(nan|[-+]?\d+(?:\.\d+)?)\s+bpm_median=(nan|[-+]?\d+(?:\.\d+)?)\s+quarantine_count=(\d+)\s+recalibration_count=(\d+)\s+unsafe_valid=(\d+)\s+single_channel_valid=(\d+)\s+valid_during_quarantine=(\d+)$/i;
 
 export function parseCsvLine(line) {
   const values = [];
@@ -71,5 +71,11 @@ export function parseReplayResult(line) {
     longestValidMs: Number(match[6]),
     bpmMin: numeric(match[7]),
     bpmMax: numeric(match[8]),
+    bpmMedian: numeric(match[9]),
+    quarantineCount: Number(match[10]),
+    recalibrationCount: Number(match[11]),
+    unsafeValid: Number(match[12]),
+    singleChannelValid: Number(match[13]),
+    validDuringQuarantine: Number(match[14]),
   };
 }

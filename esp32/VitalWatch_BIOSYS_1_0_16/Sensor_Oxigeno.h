@@ -119,6 +119,23 @@ struct PPGDiagnostics {
   int32_t maximHeartRate;
   int8_t maximHeartRateValid;
   float researchSpo2Candidate;
+  float redProminence;
+  float redThreshold;
+  float redSnr;
+  bool redCandidate;
+  float irProminence;
+  float irThreshold;
+  float irSnr;
+  bool irCandidate;
+  bool peakFused;
+  uint8_t detectorState;
+  uint32_t quarantineRemainingMs;
+  uint8_t synchronizedCount;
+  uint8_t synchronizationWindowSize;
+  uint8_t ibiCount;
+  float fusionBpm;
+  float ibiMadRatio;
+  uint16_t ibiRangeMs;
   char error[28];
 };
 

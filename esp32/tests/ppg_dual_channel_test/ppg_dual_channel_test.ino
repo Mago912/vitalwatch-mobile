@@ -68,7 +68,7 @@ bool channelOutlier() {
 }
 
 PpgChannelObservation candidate(uint64_t timestampUs,bool present=true){
-  return {timestampUs,0,100,10,10,true,present,false};
+  return {timestampUs,timestampUs,0,100,10,10,true,present,false};
 }
 
 bool fusionPaired(){

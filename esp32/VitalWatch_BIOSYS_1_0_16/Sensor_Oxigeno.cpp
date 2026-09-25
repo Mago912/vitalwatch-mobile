@@ -107,6 +107,22 @@ uint16_t currentReasons=QR_NONE;
 
 void setError(const char*t){snprintf(diag.error,sizeof(diag.error),"%s",t);}
 
+void updateDetectorDiagnostics(const PpgChannelObservation &red,
+                               const PpgChannelObservation &ir,
+                               const PpgFusedBeat &beat,
+                               const PpgGateDecision &decision){
+  diag.redProminence=red.prominence;diag.redThreshold=red.threshold;
+  diag.redSnr=red.snr;diag.redCandidate=red.candidate;
+  diag.irProminence=ir.prominence;diag.irThreshold=ir.threshold;
+  diag.irSnr=ir.snr;diag.irCandidate=ir.candidate;
+  diag.peakFused=beat.fused;diag.detectorState=(uint8_t)decision.state;
+  diag.quarantineRemainingMs=decision.quarantineRemainingMs;
+  diag.synchronizedCount=beat.synchronizedCount;
+  diag.synchronizationWindowSize=beat.synchronizationWindowSize;
+  diag.ibiCount=beat.ibiCount;diag.fusionBpm=beat.bpm;
+  diag.ibiMadRatio=beat.madRatio;diag.ibiRangeMs=beat.rangeMs;
+}
+
 void clearDisplayBpmHistory(){
   for(uint8_t i=0;i<PPGConfig::DISPLAY_HISTORY;++i)displayBpmHistory[i]=NAN;
   displayBpmCount=displayBpmPos=0;lastQueuedBpm=NAN;lastQueuedBpmUs=0;
@@ -178,6 +194,12 @@ void resetAlgorithms(bool preserveResults=true){
   memset(spo2Hist,0,sizeof(spo2Hist));spo2Count=spo2Pos=0;
   maximSpO2=maximHR=0;maximSpO2Valid=maximHRValid=0;
   diag.modulationIndexIR=diag.modulationIndexRed=diag.ratioR=0;diag.maximSpo2=0;diag.maximSpo2Valid=0;diag.maximHeartRate=0;diag.maximHeartRateValid=0;diag.researchSpo2Candidate=NAN;
+  diag.redProminence=diag.redThreshold=diag.redSnr=0;diag.redCandidate=false;
+  diag.irProminence=diag.irThreshold=diag.irSnr=0;diag.irCandidate=false;
+  diag.peakFused=false;diag.detectorState=(uint8_t)gateDecision.state;
+  diag.quarantineRemainingMs=0;diag.synchronizedCount=0;
+  diag.synchronizationWindowSize=0;diag.ibiCount=0;diag.fusionBpm=NAN;
+  diag.ibiMadRatio=NAN;diag.ibiRangeMs=0;
   missingSamplesRemaining=0;diag.missingSamplesInWindow=false;qualityAcceptable=qualityGood=false;currentReasons=QR_NONE;
   if(!preserveResults){
     hr={NAN,HeartRateStatus::INSUFFICIENT_DATA,SignalQuality::POOR,QR_NONE,0,VitalWatchConfig::ALGORITHM_VERSION_HR};
@@ -327,6 +349,7 @@ void processSample(const PPGSample&s){
 
   updateContact(checked);if(!contact){
     gateDecision=validityGate.update(checked,latestMotionHint,{},{},{},false,false);
+    updateDetectorDiagnostics({},{},{},gateDecision);
     applyHeartRateDecision(checked,gateDecision);
     finishResearchRecord(checked,0,PEAK_NONE,processingStart);return;
   }
@@ -350,6 +373,7 @@ void processSample(const PPGSample&s){
   if(beat.fused){redDetector.confirmFused(beat.redProminence);irDetector.confirmFused(beat.irProminence);}
   gateDecision=validityGate.update(checked,latestMotionHint,red,ir,beat,contact,
     diag.missingSamplesInWindow);
+  updateDetectorDiagnostics(red,ir,beat,gateDecision);
   applyHeartRateDecision(checked,gateDecision);
   if(gateDecision.resetPipeline){redDetector.reset();irDetector.reset();beatFusion.reset();}
   float ac=0;const uint8_t peaks=diagnosticPeakBits(checked,ir,beat,ac);

@@ -27,7 +27,7 @@ constexpr uint8_t QUEUE_SIZE=8;
 Record queue[QUEUE_SIZE];
 uint8_t head=0,tail=0,count=0;
 uint32_t dropped=0;
-char tx[768];
+char tx[1024];
 size_t txLen=0,txPos=0;
 
 bool enqueue(const Record &record){
@@ -42,7 +42,7 @@ void buildLine(){
   const float axG=r.motion.axMs2/9.80665f,ayG=r.motion.ayMs2/9.80665f,azG=r.motion.azMs2/9.80665f;
   const bool mpuSaturated=r.motion.accelSaturated||r.motion.gyroSaturated;
   txLen=(size_t)snprintf(tx,sizeof(tx),
-    "PPG,%lu,%lu,%llu,%lu,%lu,%lu,%.3f,%.3f,%.3f,%u,%u,%u,%u,%.2f,%.2f,%u,%u,%u,%.2f,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%llu,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%u,%lu,%u,%lu,%.5f,%.5f,%.5f,%ld,%d,%.3f,%ld,%d,%u,%lu,%lu,%lu,%lu\n",
+    "PPG,%lu,%lu,%llu,%lu,%lu,%lu,%.3f,%.3f,%.3f,%u,%u,%u,%u,%.2f,%.2f,%u,%u,%u,%.2f,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%llu,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%u,%lu,%u,%lu,%.5f,%.5f,%.5f,%ld,%d,%.3f,%ld,%d,%u,%lu,%lu,%lu,%lu,%.3f,%.3f,%.3f,%u,%.3f,%.3f,%.3f,%u,%u,%u,%lu,%u\n",
     (unsigned long)r.ppgDiag.sessionId,(unsigned long)r.ppg.sequence,
     (unsigned long long)r.ppg.sampleTimeUs,(unsigned long)r.processingUs,
     (unsigned long)r.ppg.red,(unsigned long)r.ppg.ir,r.irDc,r.irAc,r.irFiltered,
@@ -65,7 +65,13 @@ void buildLine(){
     r.ppgDiag.researchSpo2Candidate,(long)r.ppgDiag.maximHeartRate,
     (int)r.ppgDiag.maximHeartRateValid,
     (unsigned)r.session,(unsigned long)r.loopLastUs,(unsigned long)r.loopMaxUs,
-    (unsigned long)r.displayRenderUs,(unsigned long)r.i2cFailures);
+    (unsigned long)r.displayRenderUs,(unsigned long)r.i2cFailures,
+    r.ppgDiag.redProminence,r.ppgDiag.redThreshold,r.ppgDiag.redSnr,
+    r.ppgDiag.redCandidate?1u:0u,r.ppgDiag.irProminence,r.ppgDiag.irThreshold,
+    r.ppgDiag.irSnr,r.ppgDiag.irCandidate?1u:0u,r.ppgDiag.peakFused?1u:0u,
+    (unsigned)r.ppgDiag.detectorState,
+    (unsigned long)r.ppgDiag.quarantineRemainingMs,
+    (unsigned)r.ppgDiag.synchronizedCount);
   if(txLen>=sizeof(tx))txLen=sizeof(tx)-1;txPos=0;
 }
 }
@@ -75,7 +81,7 @@ namespace BioResearch {
 // [BIOSYS-I3] API compilable a costo casi nulo cuando BIO_RESEARCH_MODE=0.
 void begin(){
 #if BIO_RESEARCH_MODE
-  Serial.println(F("type,session_id,sample_index,sample_time_us,processing_time_us,red_raw,ir_raw,ir_dc,ir_ac,ir_filtered,peak_custom,peak_sparkfun,peak_accepted,ibi_ms,bpm_instant,bpm_robust,hr_status,ppg_quality,ppg_quality_flags,spo2_result,spo2_status,spo2_quality,led_amplitude,sparkfun_check_count,sparkfun_available,hw_fifo_read_ptr,hw_fifo_write_ptr,hw_fifo_overflow,suspected_drops,missing_samples,mpu_time_us,ax_g,ay_g,az_g,acc_mag_g,gx_rad_s,gy_rad_s,gz_rad_s,gyro_mag_rad_s,mpu_window_peak_g,mpu_window_delta_g,mpu_window_gyro_rad_s,mpu_window_samples,mpu_dt_us,mpu_saturated,mpu_missed_deadlines,ppg_mod_ir_pct,ppg_mod_red_pct,ppg_ratio_r,spo2_maxim,spo2_maxim_valid,spo2_custom_candidate,maxim_hr,maxim_hr_valid,measurement_state,loop_last_us,loop_max_us,display_render_us,i2c_failures"));
+  Serial.println(F("type,session_id,sample_index,sample_time_us,processing_time_us,red_raw,ir_raw,ir_dc,ir_ac,ir_filtered,peak_custom,peak_sparkfun,peak_accepted,ibi_ms,bpm_instant,bpm_robust,hr_status,ppg_quality,ppg_quality_flags,spo2_result,spo2_status,spo2_quality,led_amplitude,sparkfun_check_count,sparkfun_available,hw_fifo_read_ptr,hw_fifo_write_ptr,hw_fifo_overflow,suspected_drops,missing_samples,mpu_time_us,ax_g,ay_g,az_g,acc_mag_g,gx_rad_s,gy_rad_s,gz_rad_s,gyro_mag_rad_s,mpu_window_peak_g,mpu_window_delta_g,mpu_window_gyro_rad_s,mpu_window_samples,mpu_dt_us,mpu_saturated,mpu_missed_deadlines,ppg_mod_ir_pct,ppg_mod_red_pct,ppg_ratio_r,spo2_maxim,spo2_maxim_valid,spo2_custom_candidate,maxim_hr,maxim_hr_valid,measurement_state,loop_last_us,loop_max_us,display_render_us,i2c_failures,red_prominence,red_threshold,red_snr,red_candidate,ir_prominence,ir_threshold,ir_snr,ir_candidate,peak_fused,detector_state,quarantine_remaining_ms,synchronized_count"));
 #endif
 }
 
