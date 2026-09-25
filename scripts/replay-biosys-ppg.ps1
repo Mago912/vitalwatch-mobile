@@ -1,8 +1,9 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$Port,
-  [Parameter(Mandatory = $true)]
   [string]$InputCsv,
+  [ValidateSet('', 'CHANNEL_WEAK', 'CHANNEL_OUTLIER')]
+  [string]$SelfTest = '',
   [bool]$ExpectValid = $true,
   [string]$OutputPath,
   [int]$BaudRate = 115200,
@@ -12,7 +13,11 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$resolvedInput = (Resolve-Path -LiteralPath $InputCsv).Path
+if ([string]::IsNullOrWhiteSpace($InputCsv) -and
+    [string]::IsNullOrWhiteSpace($SelfTest)) {
+  throw 'Indica -InputCsv o -SelfTest.'
+}
+$resolvedInput = $null
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
   $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
   $OutputPath = Join-Path $projectRoot "measurements\biosys-1.0.16\$stamp-replay.log"
@@ -20,25 +25,29 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
   $OutputPath = Join-Path $projectRoot $OutputPath
 }
 
-$rows = @(Import-Csv -LiteralPath $resolvedInput | Where-Object {
-  -not $_.PSObject.Properties['type'] -or $_.type -eq 'PPG'
-})
-if ($rows.Count -eq 0) {
-  throw "El CSV no contiene filas PPG: $resolvedInput"
-}
-
-$requiredColumns = @(
-  'sample_index', 'sample_time_us', 'red_raw', 'ir_raw',
-  'mpu_window_delta_g', 'mpu_window_gyro_rad_s', 'mpu_saturated'
-)
-foreach ($column in $requiredColumns) {
-  if (-not $rows[0].PSObject.Properties[$column]) {
-    throw "Falta la columna obligatoria '$column' en $resolvedInput."
+$rows = @()
+if ([string]::IsNullOrWhiteSpace($SelfTest)) {
+  $resolvedInput = (Resolve-Path -LiteralPath $InputCsv).Path
+  $rows = @(Import-Csv -LiteralPath $resolvedInput | Where-Object {
+    -not $_.PSObject.Properties['type'] -or $_.type -eq 'PPG'
+  })
+  if ($rows.Count -eq 0) {
+    throw "El CSV no contiene filas PPG: $resolvedInput"
   }
-}
-if (-not $rows[0].PSObject.Properties['timing_valid'] -and
-    -not $rows[0].PSObject.Properties['missing_samples']) {
-  throw "El CSV debe incluir timing_valid o missing_samples."
+
+  $requiredColumns = @(
+    'sample_index', 'sample_time_us', 'red_raw', 'ir_raw',
+    'mpu_window_delta_g', 'mpu_window_gyro_rad_s', 'mpu_saturated'
+  )
+  foreach ($column in $requiredColumns) {
+    if (-not $rows[0].PSObject.Properties[$column]) {
+      throw "Falta la columna obligatoria '$column' en $resolvedInput."
+    }
+  }
+  if (-not $rows[0].PSObject.Properties['timing_valid'] -and
+      -not $rows[0].PSObject.Properties['missing_samples']) {
+    throw "El CSV debe incluir timing_valid o missing_samples."
+  }
 }
 
 $serial = [System.IO.Ports.SerialPort]::new($Port, $BaudRate, 'None', 8, 'One')
@@ -82,6 +91,23 @@ try {
   }
   if (-not $reset) {
     throw 'El firmware no confirmo RESET. Verifica que BIOSYS replay este cargado.'
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($SelfTest)) {
+    $serial.WriteLine("SELFTEST $SelfTest")
+    $selfTestLine = Read-Until -Deadline (Get-Date).AddSeconds($TimeoutSeconds) -Predicate {
+      param($line) $line.StartsWith("[SELFTEST] $SelfTest ")
+    }
+    if (-not $selfTestLine) { throw "No se recibio el resultado de $SelfTest." }
+    $outputDirectory = Split-Path -Parent $OutputPath
+    [System.IO.Directory]::CreateDirectory($outputDirectory) | Out-Null
+    [System.IO.File]::WriteAllLines($OutputPath, $log)
+    if ($selfTestLine -notmatch "^\[SELFTEST\] $SelfTest PASS ") {
+      throw "Self-test fallido: $selfTestLine"
+    }
+    Write-Host "Self-test verificado: $selfTestLine"
+    Write-Host "Evidencia: $OutputPath"
+    return
   }
 
   $sent = 0
