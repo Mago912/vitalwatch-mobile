@@ -1,0 +1,70 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.17",
+  "mode": "BIO_RESEARCH_MODE=1",
+  "configuredExperimentId": "PPG-LED-18-A",
+  "capture": {
+    "csvFile": "20260925-161447-dedo-quieto-led-18-a-toma-2.csv",
+    "csvSha256": "37041C59F82B99C4C32A1289542892A5F284F92C3B02BFA09DD4B9C14227A1E9",
+    "metadataFile": "20260925-161447-dedo-quieto-led-18-a-toma-2.json",
+    "metadataSha256": "3BB21A9A499464CDE2BA57F03BF000C0795FBF902BF3A3E59582F422B2AAD233",
+    "requestedDurationSeconds": 90,
+    "sessionId": 4,
+    "records": 2250,
+    "discardedRecords": 0
+  },
+  "loadedBinary": {
+    "sizeBytes": 1186608,
+    "sha256": "7C0D4FB0F7FB5CBEED44C5FF6E4E356C3BFEF70FE4A24389AFF224BF144BC93D",
+    "writeAddress": "0x10000",
+    "writeVerified": true
+  },
+  "timing": {
+    "consecutivePairs": 2249,
+    "badDeltaCount": 0,
+    "minimumDeltaUs": 40000,
+    "maximumDeltaUs": 40000,
+    "suspectedDrops": 0,
+    "missingSamples": 0
+  },
+  "signal": {
+    "ledAmplitude": 24,
+    "redAverage": 73641.70,
+    "irAverage": 79848.88,
+    "redCandidates": 75,
+    "irCandidates": 67,
+    "fusedBeats": 53,
+    "ibiSamples": 42,
+    "minimumIbiMs": 340,
+    "medianIbiMs": 820,
+    "maximumIbiMs": 1600,
+    "ibiInconsistentRows": 192,
+    "channelMismatchRows": 424,
+    "opticalTransientRows": 400,
+    "highMotionRows": 0,
+    "timingInvalidRows": 0,
+    "quarantineEntries": 4,
+    "recalibrationEntries": 4
+  },
+  "technicalValidity": {
+    "validSamples": 17,
+    "longestValidMs": 680,
+    "validBpmMinimum": 83.33,
+    "validBpmMedian": 83.33,
+    "validBpmMaximum": 83.33,
+    "minimumSynchronizedCountDuringValid": 6,
+    "maximumSynchronizedCountDuringValid": 6,
+    "validWithHighMotion": 0,
+    "validWithOpticalTransient": 0,
+    "validWithTimingInvalid": 0,
+    "validWithInsufficientDualChannelEvidence": 0
+  },
+  "acceptance": {
+    "passed": false,
+    "verdict": "REPLICATION_FAILED_KEEP_RESEARCH",
+    "failedCriterion": "longest VALID segment >= 10000 ms",
+    "observation": "La placa permanecio inmovil, pero hubo cuatro cuarentenas, 400 filas con transitorio optico y 424 con desacuerdo rojo/IR.",
+    "nextStep": "Repetir con la mano y el sensor apoyados para distinguir inestabilidad de contacto de una limitacion del algoritmo."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}

@@ -70,9 +70,11 @@ criterios de validez.
 - `CAMBIOS_1_0_17.md` define la hipótesis y la puerta de aceptación nuevas.
 - `measurements/biosys-1.0.17/replay-results.json` registra la regresión física.
 - Replay 1.0.17: **23/23 autotests y 4/4 datasets PASS**.
-- Captura LED `0x18`: **PASS**, 2.250 registros, 0 descartados y 32.720 ms
-  continuos `VALID`.
-- Hipótesis `PPG-LED-18-A`: **aceptada técnicamente; replicación pendiente**.
+- Captura LED `0x18` toma 1: **PASS**, 2.250 registros, 0 descartados y
+  32.720 ms continuos `VALID`.
+- Captura LED `0x18` toma 2: **FAIL**, 2.250 registros, 0 descartados y sólo
+  680 ms continuos `VALID` por inestabilidad óptica.
+- Hipótesis `PPG-LED-18-A`: **resultado mixto; conservar en investigación**.
 - `VALID` significa validez técnica interna; no es validación clínica.
 
 ## Exclusiones

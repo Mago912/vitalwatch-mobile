@@ -2,7 +2,7 @@
 
 Fecha: 2026-09-25
 
-Estado: **RESEARCH HYPOTHESIS ACCEPTED - REPLICATION PENDING**
+Estado: **RESEARCH - MIXED PHYSICAL RESULTS**
 
 ## Hipótesis única
 
@@ -88,6 +88,21 @@ trasladar la potencia óptica al perfil normal.
 
 Evidencia estructurada:
 `measurements/biosys-1.0.17/20260925-121707-dedo-quieto-led-18-a-toma-1-acceptance.json`.
+
+## Réplica física
+
+La segunda toma independiente conservó la cadencia perfecta de 2.250 registros
+y cero descartados, pero sólo alcanzó 680 ms continuos `VALID`. Registró cuatro
+cuarentenas, 400 filas con transitorio óptico y 424 con desacuerdo rojo/IR,
+mientras la aceleración total permaneció entre 0,939 y 0,973 g.
+
+Por lo tanto, la mejora de la primera toma no quedó reproducida. El resultado
+combinado es mixto y `0x18` no se trasladará todavía al perfil normal. La
+siguiente prueba debe estabilizar mecánicamente la mano y el sensor para separar
+el contacto óptico variable de una limitación del detector.
+
+Evidencia de la réplica:
+`measurements/biosys-1.0.17/20260925-161447-dedo-quieto-led-18-a-toma-2-acceptance.json`.
 
 `VALID` sólo expresa coherencia técnica interna. No constituye validación
 clínica, diagnóstico médico ni comparación con un instrumento certificado.

@@ -1,0 +1,14 @@
+{
+    "firmware":  "BIOSYS 1.0.17",
+    "mode":  "BIO_RESEARCH_MODE=1",
+    "label":  "dedo-quieto-led-18-a-toma-2",
+    "port":  "COM3",
+    "baudRate":  460800,
+    "requestedDurationSeconds":  90,
+    "startedAt":  "2026-09-25T16:14:47.1750459-03:00",
+    "finishedAt":  "2026-09-25T16:16:19.4266626-03:00",
+    "researchRecords":  2250,
+    "discardedRecords":  0,
+    "csvFile":  "20260925-161447-dedo-quieto-led-18-a-toma-2.csv",
+    "note":  "Datos experimentales. No usar para diagnostico medico."
+}
