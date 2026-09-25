@@ -35,7 +35,7 @@ No se modifican caídas, SOS, medicamentos, telemetría ni criterios de validez.
 |---|---|---|
 | Producto | `firmware:biosys:build` | compilación PASS |
 | Investigación | `firmware:biosys:research` | compilación PASS |
-| Replay | `firmware:biosys:replay` | compilación PASS; ejecución física pendiente |
+| Replay | `firmware:biosys:replay` | compilación y ejecución física PASS |
 
 | Perfil | Programa | RAM global | `.bin` | SHA-256 |
 |---|---:|---:|---:|---|
@@ -74,6 +74,16 @@ El replay se escribió en `0x10000` al 100 % y `esptool` verificó su hash.
 
 La evidencia de 1.0.18 no se presenta como resultado físico de 1.0.19.
 `VALID` es validez técnica interna y no constituye validación clínica.
+
+## Replay físico propio de 1.0.19
+
+El binario replay de 486.832 bytes con SHA-256
+`AA7582A7BB4FE553252BA9E970617D6F1DD8838CE55860D4BC658F85D9E45A43`
+se escribió al 100 % y verificó su hash en el ESP32 conectado por `COM3`.
+
+Resultado: **23/23 autotests y 4/4 datasets PASS**, con cero resultados
+inseguros, cero validaciones de canal único y cero valores válidos durante
+cuarentena. La evidencia está en `measurements/biosys-1.0.19`.
 
 ## Exclusiones
 

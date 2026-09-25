@@ -1,0 +1,5 @@
+[REPLAY] RESET_OK
+[INFO][PPG] sesion=5 contacto confirmado; estabilizando
+[INFO][PPG] Estabilizacion completa; midiendo
+[INFO][PPG] Contacto perdido; esperando dedo
+[SELFTEST] RESET_AFTER_VALID PASS status=4 bpm=nan reasons=0x0001 longest_valid_ms=0

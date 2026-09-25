@@ -54,3 +54,19 @@ Los tres perfiles compilaron correctamente con Arduino CLI:
 | Replay | 486.680 B | 37.252 B | 486.832 B | `AA7582A7BB4FE553252BA9E970617D6F1DD8838CE55860D4BC658F85D9E45A43` |
 
 Estos datos demuestran compilación reproducible, no ejecución física.
+
+## Replay físico
+
+El perfil replay se escribió físicamente en el ESP32 por `COM3` al 100 % y
+`esptool` verificó el hash de cada bloque. Se ejecutaron:
+
+- 23/23 autotests internos: PASS;
+- 4/4 datasets inmutables: PASS;
+- cero resultados inseguros;
+- cero validaciones con un solo canal;
+- cero resultados válidos durante cuarentena.
+
+El resultado completo está en
+`measurements/biosys-1.0.19/replay-results.json`. Esta prueba valida la ejecución
+del pipeline en la placa, pero todavía no equivale a instalar ni probar el
+perfil normal de 1.0.19.
