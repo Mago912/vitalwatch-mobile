@@ -66,3 +66,16 @@ La imagen replay se escribió al 100 % en `0x10000` y finalizó con
 
 El pipeline de seguridad permanece igual a 1.0.17. Aún faltan las pruebas
 físicas específicas de autoganancia con el MAX30102.
+
+## Captura física estable, toma 1
+
+La imagen de investigación se escribió físicamente al 100 % y se verificó el
+hash. El arranque confirmó BIOSYS 1.0.18, BIO 0.7.2 y MAX30102 `PART_ID=0x15`.
+
+La primera toma obtuvo 2.250 registros y cero descartados. La autoganancia
+mantuvo `0x18` durante toda la captura, pero cuatro interrupciones por contacto
+o movimiento limitaron el tramo `VALID` máximo a 1.880 ms. No hubo ningún
+`VALID` durante movimiento, transitorio óptico o tiempo inválido.
+
+La estabilidad de ganancia queda confirmada para este contacto. La puerta de
+validez no fue superada y debe repetirse la toma sin cambiar umbrales.

@@ -1,0 +1,14 @@
+{
+    "firmware":  "BIOSYS 1.0.18",
+    "mode":  "BIO_RESEARCH_MODE=1",
+    "label":  "autogain-18-contacto-estable-toma-1",
+    "port":  "COM3",
+    "baudRate":  460800,
+    "requestedDurationSeconds":  90,
+    "startedAt":  "2026-09-25T17:50:49.2054450-03:00",
+    "finishedAt":  "2026-09-25T17:52:21.4012187-03:00",
+    "researchRecords":  2250,
+    "discardedRecords":  0,
+    "csvFile":  "20260925-175049-autogain-18-contacto-estable-toma-1.csv",
+    "note":  "Datos experimentales. No usar para diagnostico medico."
+}

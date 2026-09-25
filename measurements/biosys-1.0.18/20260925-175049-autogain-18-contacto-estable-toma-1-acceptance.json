@@ -1,0 +1,86 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.18",
+  "mode": "BIO_RESEARCH_MODE=1",
+  "configuredExperimentId": "PPG-AUTOGAIN-18-A",
+  "capture": {
+    "csvFile": "20260925-175049-autogain-18-contacto-estable-toma-1.csv",
+    "csvSha256": "D7A0FA680E02CB7EB6BAEAEB46622312A2B658C30869E9F12E4CE0FE76D56160",
+    "metadataFile": "20260925-175049-autogain-18-contacto-estable-toma-1.json",
+    "metadataSha256": "494D7FD321DBEB29A2209B09BF69A4CC7E6E7AB267A496A9866AE78C0FAC185D",
+    "requestedDurationSeconds": 90,
+    "sessionId": 1,
+    "records": 2250,
+    "discardedRecords": 0
+  },
+  "loadedBinary": {
+    "sizeBytes": 1186608,
+    "sha256": "7E15173C832B9487A632E619A2CD35EA2B1689E9F515C49CB068E922480F15B5",
+    "writeAddress": "0x10000",
+    "writeVerified": true,
+    "successfulWriteBaud": 38400
+  },
+  "startup": {
+    "biosys": "1.0.18",
+    "sys": "0.9.9",
+    "bio": "0.7.2",
+    "max30102PartId": "0x15"
+  },
+  "autogain": {
+    "initialLedAmplitude": 24,
+    "minimumLedAmplitude": 24,
+    "maximumLedAmplitude": 24,
+    "ledChanges": 0,
+    "stableAfterStabilization": true
+  },
+  "timing": {
+    "consecutivePairs": 2249,
+    "badDeltaCount": 0,
+    "minimumDeltaUs": 40000,
+    "maximumDeltaUs": 40000,
+    "suspectedDrops": 0,
+    "missingSamples": 0
+  },
+  "signal": {
+    "redAverage": 74942.49,
+    "irAverage": 81620.97,
+    "redCandidates": 57,
+    "irCandidates": 60,
+    "fusedBeats": 46,
+    "ibiSamples": 35,
+    "minimumIbiMs": 500,
+    "medianIbiMs": 880,
+    "maximumIbiMs": 1360,
+    "ibiInconsistentRows": 305,
+    "channelMismatchRows": 189,
+    "opticalTransientRows": 300,
+    "highMotionRows": 101,
+    "timingInvalidRows": 0,
+    "quarantineEntries": 4,
+    "recalibrationEntries": 4,
+    "minimumAccelerationMagnitudeG": 0.941,
+    "maximumAccelerationMagnitudeG": 0.987,
+    "maximumGyroscopeMagnitudeRadS": 0.2661
+  },
+  "technicalValidity": {
+    "validSamples": 47,
+    "longestValidMs": 1880,
+    "validBpmMinimum": 68.18,
+    "validBpmMedian": 68.18,
+    "validBpmMaximum": 68.18,
+    "minimumSynchronizedCountDuringValid": 6,
+    "maximumSynchronizedCountDuringValid": 7,
+    "validWithHighMotion": 0,
+    "validWithOpticalTransient": 0,
+    "validWithTimingInvalid": 0,
+    "validWithInsufficientDualChannelEvidence": 0
+  },
+  "acceptance": {
+    "passed": false,
+    "verdict": "STABLE_GAIN_CONFIRMED_VALIDITY_REPLICATION_REQUIRED",
+    "failedCriterion": "longest VALID segment >= 10000 ms",
+    "passedSubcriterion": "LED amplitude remained stable after stabilization",
+    "nextStep": "Repeat stable-contact capture without changing gain or validity thresholds."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}
