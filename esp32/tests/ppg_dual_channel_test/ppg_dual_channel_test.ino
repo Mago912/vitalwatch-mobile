@@ -2,6 +2,8 @@
 #include "../../VitalWatch_BIOSYS_1_0_16/PpgChannelDetector.cpp"
 #include "../../VitalWatch_BIOSYS_1_0_16/PpgBeatFusion.h"
 #include "../../VitalWatch_BIOSYS_1_0_16/PpgBeatFusion.cpp"
+#include "../../VitalWatch_BIOSYS_1_0_16/PpgValidityGate.h"
+#include "../../VitalWatch_BIOSYS_1_0_16/PpgValidityGate.cpp"
 
 static_assert(PpgChannelConfig::CALIBRATION_SAMPLES == 50, "calibration");
 static_assert(PpgChannelConfig::PROMINENCE_CAPACITY == 32, "fixed ring");
@@ -46,8 +48,8 @@ bool channelOutlier() {
     detector.update(80000UL,(uint64_t)index*40000ULL);
 
   // Cuatro pulsos calibran percentiles; cinco normales garantizan cuatro
-  // fusiones para la mediana, el decimo es el outlier y luego hay cuatro normales.
-  for(uint8_t pulse=0;pulse<14;++pulse){
+  // fusiones para la mediana, el decimo es el outlier y luego hay cinco normales.
+  for(uint8_t pulse=0;pulse<15;++pulse){
     const uint16_t amplitude=pulse==9?840:120;
     for(uint8_t phase=0;phase<25;++phase){
       const uint32_t index=60UL+(uint32_t)pulse*25UL+phase;
@@ -110,6 +112,80 @@ bool fusionRollover(){
   );
   return result.fused&&result.ibiMs==760;
 }
+
+PPGSample gateSample(uint64_t timestampUs,uint32_t red=100000,uint32_t ir=100000){
+  return {red,ir,(uint32_t)(timestampUs/40000ULL),timestampUs,true};
+}
+
+PpgMotionHint gateMotion(float deltaG=0,float gyro=0,bool saturated=false){
+  return {deltaG,gyro,saturated,true};
+}
+
+PpgGateDecision gateUpdate(PpgValidityGate &gate,const PPGSample &sample,
+                           const PpgMotionHint &motion=gateMotion()){
+  return gate.update(sample,motion,candidate(sample.sampleTimeUs,false),
+    candidate(sample.sampleTimeUs,false),PpgFusedBeat{},true,false);
+}
+
+bool optical7Percent(){
+  PpgValidityGate gate;gate.reset(PpgDetectorState::TRACKING);
+  gateUpdate(gate,gateSample(1000000));
+  return gateUpdate(gate,gateSample(1040000,107000,107000)).state!=
+    PpgDetectorState::QUARANTINED;
+}
+
+bool optical9Percent(){
+  PpgValidityGate gate;gate.reset(PpgDetectorState::TRACKING);
+  gateUpdate(gate,gateSample(1000000));
+  const PpgGateDecision result=gateUpdate(gate,gateSample(1040000,109001,109001));
+  return result.state==PpgDetectorState::QUARANTINED&&
+    (result.qualityReasons&QR_OPTICAL_TRANSIENT)!=0;
+}
+
+bool motionOneModerate(){
+  PpgValidityGate gate;gate.reset(PpgDetectorState::TRACKING);
+  gateUpdate(gate,gateSample(1000000));
+  return gateUpdate(gate,gateSample(1040000),gateMotion(0.05f)).state!=
+    PpgDetectorState::QUARANTINED;
+}
+
+bool motionThreeModerate(){
+  PpgValidityGate gate;gate.reset(PpgDetectorState::TRACKING);
+  gateUpdate(gate,gateSample(1000000));
+  gateUpdate(gate,gateSample(1040000),gateMotion(0.05f));
+  gateUpdate(gate,gateSample(1080000),gateMotion(0.05f));
+  const PpgGateDecision result=gateUpdate(
+    gate,gateSample(1120000),gateMotion(0.05f)
+  );
+  return result.state==PpgDetectorState::QUARANTINED&&
+    (result.qualityReasons&QR_HIGH_MOTION)!=0;
+}
+
+bool motionSevere(){
+  PpgValidityGate gate;gate.reset(PpgDetectorState::TRACKING);
+  gateUpdate(gate,gateSample(1000000));
+  return gateUpdate(gate,gateSample(1040000),gateMotion(0,0.75f)).state==
+    PpgDetectorState::QUARANTINED;
+}
+
+bool motionSaturated(){
+  PpgValidityGate gate;gate.reset(PpgDetectorState::TRACKING);
+  gateUpdate(gate,gateSample(1000000));
+  return gateUpdate(gate,gateSample(1040000),gateMotion(0,0,true)).state==
+    PpgDetectorState::QUARANTINED;
+}
+
+bool recoveryRestart(){
+  PpgValidityGate gate;gate.reset(PpgDetectorState::TRACKING);
+  gateUpdate(gate,gateSample(1000000));
+  gateUpdate(gate,gateSample(1040000),gateMotion(0,0.75f));
+  gateUpdate(gate,gateSample(5030000),gateMotion(0,0.75f));
+  const PpgGateDecision before=gateUpdate(gate,gateSample(9020000));
+  const PpgGateDecision after=gateUpdate(gate,gateSample(9040000));
+  return before.state==PpgDetectorState::QUARANTINED&&
+    before.quarantineRemainingMs>0&&
+    after.state==PpgDetectorState::CALIBRATING;
+}
 }
 
 void setup() {
@@ -119,7 +195,9 @@ void setup() {
   if(observation.candidate || observation.artifact)abort();
   if(!channelWeak() || !channelOutlier() || !fusionPaired() ||
      !fusionRedOnly() || !fusionIrOnly() || !fusionTooFar() ||
-     !fusionLongGap() || !fusionRollover())abort();
+     !fusionLongGap() || !fusionRollover() || !optical7Percent() ||
+     !optical9Percent() || !motionOneModerate() || !motionThreeModerate() ||
+     !motionSevere() || !motionSaturated() || !recoveryRestart())abort();
 }
 
 void loop() {}

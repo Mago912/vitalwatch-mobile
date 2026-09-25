@@ -3,6 +3,7 @@
 #include "Sensor_Oxigeno.h"
 #include "PpgChannelDetector.h"
 #include "PpgBeatFusion.h"
+#include "PpgValidityGate.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -53,7 +54,7 @@ bool selfTestChannelOutlier(uint16_t &candidates,uint16_t &artifacts,
   candidates=artifacts=normalAfterOutlier=0;
   for(uint32_t index=0;index<60;++index)
     detector.update(80000UL,(uint64_t)index*40000ULL);
-  for(uint8_t pulse=0;pulse<14;++pulse){
+  for(uint8_t pulse=0;pulse<15;++pulse){
     const uint16_t amplitude=pulse==9?840:120;
     for(uint8_t phase=0;phase<25;++phase){
       const uint32_t index=60UL+(uint32_t)pulse*25UL+phase;
@@ -116,6 +117,66 @@ bool runFusionSelfTest(const char *name,PpgFusedBeat &result,
   return false;
 }
 
+PPGSample gateSample(uint64_t timestampUs,uint32_t red=100000,uint32_t ir=100000){
+  return {red,ir,(uint32_t)(timestampUs/40000ULL),timestampUs,true};
+}
+
+PpgMotionHint gateMotion(float deltaG=0,float gyro=0,bool saturated=false){
+  return {deltaG,gyro,saturated,true};
+}
+
+PpgGateDecision gateUpdate(PpgValidityGate &gate,const PPGSample &sample,
+                           const PpgMotionHint &motion=gateMotion()){
+  return gate.update(sample,motion,fusionObservation(sample.sampleTimeUs,false),
+    fusionObservation(sample.sampleTimeUs,false),PpgFusedBeat{},true,false);
+}
+
+bool runGateSelfTest(const char *name,PpgGateDecision &result){
+  PpgValidityGate gate;
+  gate.reset(PpgDetectorState::TRACKING);
+  gateUpdate(gate,gateSample(1000000));
+  if(strcmp(name,"OPTICAL_7_PERCENT")==0){
+    result=gateUpdate(gate,gateSample(1040000,107000,107000));
+    return result.state!=PpgDetectorState::QUARANTINED;
+  }
+  if(strcmp(name,"OPTICAL_9_PERCENT")==0){
+    result=gateUpdate(gate,gateSample(1040000,109001,109001));
+    return result.state==PpgDetectorState::QUARANTINED&&
+      (result.qualityReasons&QR_OPTICAL_TRANSIENT)!=0;
+  }
+  if(strcmp(name,"MOTION_ONE_MODERATE")==0){
+    result=gateUpdate(gate,gateSample(1040000),gateMotion(0.05f));
+    return result.state!=PpgDetectorState::QUARANTINED;
+  }
+  if(strcmp(name,"MOTION_THREE_MODERATE")==0){
+    gateUpdate(gate,gateSample(1040000),gateMotion(0.05f));
+    gateUpdate(gate,gateSample(1080000),gateMotion(0.05f));
+    result=gateUpdate(gate,gateSample(1120000),gateMotion(0.05f));
+    return result.state==PpgDetectorState::QUARANTINED&&
+      (result.qualityReasons&QR_HIGH_MOTION)!=0;
+  }
+  if(strcmp(name,"MOTION_SEVERE")==0){
+    result=gateUpdate(gate,gateSample(1040000),gateMotion(0,0.75f));
+    return result.state==PpgDetectorState::QUARANTINED&&
+      (result.qualityReasons&QR_HIGH_MOTION)!=0;
+  }
+  if(strcmp(name,"MOTION_SATURATED")==0){
+    result=gateUpdate(gate,gateSample(1040000),gateMotion(0,0,true));
+    return result.state==PpgDetectorState::QUARANTINED&&
+      (result.qualityReasons&QR_HIGH_MOTION)!=0;
+  }
+  if(strcmp(name,"RECOVERY_RESTART")==0){
+    gateUpdate(gate,gateSample(1040000),gateMotion(0,0.75f));
+    gateUpdate(gate,gateSample(5030000),gateMotion(0,0.75f));
+    const PpgGateDecision before=gateUpdate(gate,gateSample(9020000));
+    result=gateUpdate(gate,gateSample(9040000));
+    return before.state==PpgDetectorState::QUARANTINED&&
+      before.quarantineRemainingMs>0&&
+      result.state==PpgDetectorState::CALIBRATING;
+  }
+  return false;
+}
+
 void runSelfTest(const char *name){
   uint16_t candidates=0,artifacts=0,normalAfter=0;
   bool passed=false;
@@ -131,6 +192,17 @@ void runSelfTest(const char *name){
       "[SELFTEST] %s %s fused=%u ibi_ms=%u reset=%u ibi_count=%u sync=%u\n",
       name,passed?"PASS":"FAIL",result.fused?1u:0u,(unsigned)result.ibiMs,
       result.historyReset?1u:0u,(unsigned)ibiCount,(unsigned)synchronizedCount
+    );
+    return;
+  }else if(strncmp(name,"OPTICAL_",8)==0||strncmp(name,"MOTION_",7)==0||
+           strncmp(name,"RECOVERY_",9)==0){
+    PpgGateDecision result={};
+    passed=runGateSelfTest(name,result);
+    Serial.printf(
+      "[SELFTEST] %s %s state=%u status=%u reasons=0x%04X remaining_ms=%lu reset=%u\n",
+      name,passed?"PASS":"FAIL",(unsigned)result.state,
+      (unsigned)result.status,(unsigned)result.qualityReasons,
+      (unsigned long)result.quarantineRemainingMs,result.resetPipeline?1u:0u
     );
     return;
   }

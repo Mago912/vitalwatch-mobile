@@ -130,7 +130,10 @@ enum QualityReason : uint16_t {
   QR_IBI_INCONSISTENT  = 1u << 4,
   QR_TIMING_INVALID    = 1u << 5,
   QR_MISSING_SAMPLES   = 1u << 6,
-  QR_HIGH_MOTION       = 1u << 7
+  QR_HIGH_MOTION       = 1u << 7,
+  QR_OPTICAL_TRANSIENT = 1u << 8,
+  QR_CHANNEL_MISMATCH  = 1u << 9,
+  QR_DETECTOR_CALIBRATING = 1u << 10
 };
 
 inline QualityReason operator|(QualityReason a, QualityReason b) {

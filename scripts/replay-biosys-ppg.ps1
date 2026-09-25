@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Port,
   [string]$InputCsv,
-  [ValidateSet('', 'CHANNEL_WEAK', 'CHANNEL_OUTLIER', 'FUSION_PAIRED', 'FUSION_RED_ONLY', 'FUSION_IR_ONLY', 'FUSION_TOO_FAR', 'FUSION_LONG_GAP', 'FUSION_ROLLOVER')]
+  [ValidateSet('', 'CHANNEL_WEAK', 'CHANNEL_OUTLIER', 'FUSION_PAIRED', 'FUSION_RED_ONLY', 'FUSION_IR_ONLY', 'FUSION_TOO_FAR', 'FUSION_LONG_GAP', 'FUSION_ROLLOVER', 'OPTICAL_7_PERCENT', 'OPTICAL_9_PERCENT', 'MOTION_ONE_MODERATE', 'MOTION_THREE_MODERATE', 'MOTION_SEVERE', 'MOTION_SATURATED', 'RECOVERY_RESTART')]
   [string]$SelfTest = '',
   [bool]$ExpectValid = $true,
   [string]$OutputPath,
