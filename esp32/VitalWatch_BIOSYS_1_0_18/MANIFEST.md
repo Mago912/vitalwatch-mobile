@@ -37,7 +37,7 @@ No se modifican caídas, SOS, medicamentos, telemetría ni criterios de validez.
 |---|---|---|
 | Producto | `firmware:biosys:build` | compilación PASS |
 | Investigación | `firmware:biosys:research` | compilación PASS |
-| Replay | `firmware:biosys:replay` | compilación PASS; ejecución pendiente |
+| Replay | `firmware:biosys:replay` | compilación y ejecución física PASS |
 
 | Perfil | Programa | RAM global | `.bin` | SHA-256 |
 |---|---:|---:|---:|---|
@@ -50,11 +50,14 @@ placa.
 
 ## Evidencia requerida
 
-- regresión física de los 23 autotests;
-- replay físico de los cuatro datasets inmutables;
+- regresión física de los 23 autotests: **23/23 PASS**;
+- replay físico de los cuatro datasets inmutables: **4/4 PASS**;
 - toma estable de 90 segundos;
 - prueba separada de señal débil y aumento de potencia;
 - cero publicaciones `VALID` durante ajuste, cuarentena o artefactos.
+
+El replay se escribió en `0x10000` al 100 % y `esptool` verificó su hash.
+`measurements/biosys-1.0.18/replay-results.json` conserva los resultados.
 
 La evidencia de 1.0.17 no se presenta como resultado físico de 1.0.18.
 `VALID` es validez técnica interna y no constituye validación clínica.

@@ -85,7 +85,7 @@ test('rejects malformed replay summaries', () => {
 
 test('physical CODEX reproduction datasets meet the approved safety barriers', () => {
   const evidence = JSON.parse(fs.readFileSync(path.join(
-    ROOT, 'measurements', 'biosys-1.0.17', 'replay-results.json',
+    ROOT, 'measurements', 'biosys-1.0.18', 'replay-results.json',
   ), 'utf8'));
   const { noFinger, stableTimeline, led35Stable, contactChange } = evidence.datasets;
 

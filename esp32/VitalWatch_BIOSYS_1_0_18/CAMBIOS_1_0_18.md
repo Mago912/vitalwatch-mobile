@@ -52,3 +52,17 @@ SHA-256 de investigación:
 
 Compilar no demuestra funcionamiento físico. Aún faltan replay y capturas en
 el ESP32.
+
+## Regresión física de replay
+
+La imagen replay se escribió al 100 % en `0x10000` y finalizó con
+`Hash of data verified`.
+
+- 23 de 23 autotests: PASS;
+- 4 de 4 datasets inmutables: PASS;
+- señal estable histórica: 12.600 ms continuos `VALID`;
+- sin dedo y cambio de contacto: cero publicaciones `VALID`;
+- cero `unsafe_valid`, `single_channel_valid` o `valid_during_quarantine`.
+
+El pipeline de seguridad permanece igual a 1.0.17. Aún faltan las pruebas
+físicas específicas de autoganancia con el MAX30102.
