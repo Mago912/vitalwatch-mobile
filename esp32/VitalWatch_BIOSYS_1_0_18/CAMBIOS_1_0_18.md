@@ -90,3 +90,17 @@ seguro de ausencia de contacto, pero no cuenta como prueba de contacto estable.
 
 La repetición debe comenzar después de retirar el dedo durante al menos cinco
 segundos y volver a colocarlo centrado sobre el MAX30102.
+
+## Captura física estable, toma 3
+
+La repetición controlada obtuvo 2.250 registros, cero descartados, tiempo exacto
+de 40.000 us y cero muestras perdidas. El tramo `VALID` más largo fue de
+27.240 ms, con 1.195 muestras válidas y entre 7 y 8 latidos sincronizados.
+
+El LED permaneció fijo en `0x18`. No se publicó ningún resultado `VALID` durante
+movimiento, transitorio óptico, tiempo inválido o evidencia insuficiente de los
+dos canales. Resultado: **PASS para contacto estable y ganancia fija**.
+
+Esto valida el comportamiento técnico de la captura, no la exactitud clínica.
+Todavía falta una prueba separada de señal débil que obligue a subir la potencia
+antes de confirmar el contacto.

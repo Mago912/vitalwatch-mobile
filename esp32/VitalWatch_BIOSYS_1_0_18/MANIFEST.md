@@ -63,6 +63,10 @@ Intento 2: 2.250 registros, 0 descartados y 2.250 muestras `SIN DEDO` con los
 canales cerca de 500. Resultado: **configuración de contacto inválida**; el
 firmware no fabricó una frecuencia y la prueba estable debe repetirse.
 
+Captura estable toma 3: 2.250 registros, 0 descartados, 27.240 ms continuos
+`VALID`, sincronización mínima de 7 y LED fijo en `0x18`. Resultado: **PASS
+para contacto estable y ganancia fija**. Pendiente: aumento con señal débil.
+
 El replay se escribió en `0x10000` al 100 % y `esptool` verificó su hash.
 `measurements/biosys-1.0.18/replay-results.json` conserva los resultados.
 

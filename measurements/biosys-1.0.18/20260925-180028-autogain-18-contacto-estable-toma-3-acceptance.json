@@ -1,0 +1,95 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.18",
+  "mode": "BIO_RESEARCH_MODE=1",
+  "configuredExperimentId": "PPG-AUTOGAIN-18-A",
+  "capture": {
+    "csvFile": "20260925-180028-autogain-18-contacto-estable-toma-3.csv",
+    "csvSha256": "C93437FE8083DCBD4824C6CADE91E5C4E2A91D8BEE8FB5A6971E29CDAB30E566",
+    "metadataFile": "20260925-180028-autogain-18-contacto-estable-toma-3.json",
+    "metadataSha256": "BAE498FC3C0E0C0F141324C963CCE64D44D4B1716E81956575EDE13873C620F8",
+    "requestedDurationSeconds": 90,
+    "sessionId": 3,
+    "records": 2250,
+    "discardedRecords": 0
+  },
+  "loadedBinary": {
+    "sizeBytes": 1186608,
+    "sha256": "7E15173C832B9487A632E619A2CD35EA2B1689E9F515C49CB068E922480F15B5",
+    "writeAddress": "0x10000",
+    "writeVerified": true,
+    "successfulWriteBaud": 38400
+  },
+  "startup": {
+    "biosys": "1.0.18",
+    "sys": "0.9.9",
+    "bio": "0.7.2",
+    "max30102PartId": "0x15"
+  },
+  "autogain": {
+    "initialLedAmplitude": 24,
+    "minimumLedAmplitude": 24,
+    "maximumLedAmplitude": 24,
+    "ledChanges": 0,
+    "stableAfterStabilization": true
+  },
+  "timing": {
+    "consecutivePairs": 2249,
+    "badDeltaCount": 0,
+    "minimumDeltaUs": 40000,
+    "maximumDeltaUs": 40000,
+    "suspectedDrops": 0,
+    "missingSamples": 0
+  },
+  "signal": {
+    "redAverage": 74914.0,
+    "irAverage": 81845.02,
+    "redCandidates": 89,
+    "irCandidates": 88,
+    "fusedBeats": 84,
+    "ibiSamples": 78,
+    "minimumIbiMs": 640,
+    "medianIbiMs": 860,
+    "maximumIbiMs": 1160,
+    "ibiInconsistentRows": 255,
+    "channelMismatchRows": 41,
+    "opticalTransientRows": 100,
+    "highMotionRows": 0,
+    "timingInvalidRows": 0,
+    "quarantineEntries": 1,
+    "recalibrationEntries": 1,
+    "minimumAccelerationMagnitudeG": 0.94247,
+    "maximumAccelerationMagnitudeG": 0.9909,
+    "maximumGyroscopeMagnitudeRadS": 0.02161
+  },
+  "technicalValidity": {
+    "validSamples": 1195,
+    "longestValidMs": 27240,
+    "validBpmMinimum": 63.83,
+    "validBpmMedian": 68.18,
+    "validBpmMaximum": 73.17,
+    "minimumSynchronizedCountDuringValid": 7,
+    "maximumSynchronizedCountDuringValid": 8,
+    "validWithHighMotion": 0,
+    "validWithOpticalTransient": 0,
+    "validWithTimingInvalid": 0,
+    "validWithInsufficientDualChannelEvidence": 0
+  },
+  "acceptance": {
+    "passed": true,
+    "verdict": "STABLE_CONTACT_AND_FIXED_GAIN_ACCEPTED",
+    "passedCriteria": [
+      "records >= 2200",
+      "discarded records = 0",
+      "all sample deltas = 40000 us",
+      "suspected drops = 0",
+      "missing samples = 0",
+      "longest VALID segment >= 10000 ms",
+      "no VALID samples during motion, optical transient or invalid timing",
+      "all VALID samples have synchronized count >= 6",
+      "LED amplitude remains stable after stabilization"
+    ],
+    "nextStep": "Run a separate weak-signal capture to verify that pre-contact autogain increases LED amplitude without publishing unsafe values."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}
