@@ -1,0 +1,101 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.18",
+  "mode": "BIO_RESEARCH_MODE=1",
+  "configuredExperimentId": "PPG-AUTOGAIN-18-A",
+  "capture": {
+    "csvFile": "20260925-180446-autogain-18-senal-debil-toma-1.csv",
+    "csvSha256": "94B31D73D8477E324491692E8DA6A03AD7E35F34418CA980992CCC40A194507F",
+    "metadataFile": "20260925-180446-autogain-18-senal-debil-toma-1.json",
+    "metadataSha256": "AB7D47D45F902373AA0EC3BF02D85CB2FE4947800BFB55EE01B60CF1CA76C1ED",
+    "requestedDurationSeconds": 90,
+    "records": 2251,
+    "discardedRecords": 0
+  },
+  "loadedBinary": {
+    "sizeBytes": 1186608,
+    "sha256": "7E15173C832B9487A632E619A2CD35EA2B1689E9F515C49CB068E922480F15B5",
+    "writeAddress": "0x10000",
+    "writeVerified": true,
+    "successfulWriteBaud": 38400
+  },
+  "startup": {
+    "biosys": "1.0.18",
+    "sys": "0.9.9",
+    "bio": "0.7.2",
+    "max30102PartId": "0x15"
+  },
+  "protocol": {
+    "phase1": "sensor uncovered",
+    "phase2": "partial edge contact with weak optical signal",
+    "phase3": "full fingertip contact"
+  },
+  "autogain": {
+    "initialLedAmplitude": 24,
+    "firstIncrease": {
+      "elapsedMs": 15000,
+      "from": 24,
+      "to": 32,
+      "redRaw": 21658,
+      "irRaw": 16106,
+      "heartRateStatus": "NO_CONTACT"
+    },
+    "secondIncrease": {
+      "elapsedMs": 15680,
+      "from": 32,
+      "to": 40,
+      "redRaw": 58021,
+      "irRaw": 51345,
+      "heartRateStatus": "INSUFFICIENT_DATA",
+      "measurementState": "STABILIZING"
+    },
+    "contactConfirmedAtMs": 15200,
+    "measurementStartedAtMs": 19200,
+    "finalLedAmplitude": 40,
+    "changesAfterMeasurementStarted": 0,
+    "frozenAfterStabilization": true
+  },
+  "timing": {
+    "consecutivePairs": 2250,
+    "badDeltaCount": 0,
+    "minimumDeltaUs": 40000,
+    "maximumDeltaUs": 40000,
+    "suspectedDrops": 0,
+    "missingSamples": 0
+  },
+  "signal": {
+    "redCandidates": 80,
+    "irCandidates": 76,
+    "fusedBeats": 64,
+    "ibiSamples": 61,
+    "channelMismatchRows": 398,
+    "opticalTransientRows": 208,
+    "highMotionRows": 0,
+    "timingInvalidRows": 0,
+    "quarantineEntries": 1,
+    "recalibrationEntries": 2
+  },
+  "technicalValidity": {
+    "validSamples": 0,
+    "validDuringAutogain": 0,
+    "validDuringOpticalTransient": 0,
+    "fabricatedHeartRateSamples": 0,
+    "note": "The dynamic weak-signal protocol was designed to validate gain adjustment and safety gating, not stable heart-rate publication."
+  },
+  "acceptance": {
+    "passed": true,
+    "verdict": "WEAK_SIGNAL_AUTOGAIN_AND_SAFETY_GATE_ACCEPTED",
+    "passedCriteria": [
+      "records >= 2200",
+      "discarded records = 0",
+      "all sample deltas = 40000 us",
+      "suspected drops = 0",
+      "missing samples = 0",
+      "LED amplitude increases above 0x18 under weak signal",
+      "LED amplitude freezes when stabilization finishes",
+      "no VALID heart-rate sample is published during gain adjustment or optical transients"
+    ],
+    "nextStep": "Promote the validated autogain constants to the normal product build, then compile and replay-test the product binary before a final physical upload."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}

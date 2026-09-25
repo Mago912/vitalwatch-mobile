@@ -1,0 +1,14 @@
+{
+    "firmware":  "BIOSYS 1.0.18",
+    "mode":  "BIO_RESEARCH_MODE=1",
+    "label":  "autogain-18-senal-debil-toma-1",
+    "port":  "COM3",
+    "baudRate":  460800,
+    "requestedDurationSeconds":  90,
+    "startedAt":  "2026-09-25T18:04:47.0740076-03:00",
+    "finishedAt":  "2026-09-25T18:06:19.4861494-03:00",
+    "researchRecords":  2251,
+    "discardedRecords":  0,
+    "csvFile":  "20260925-180446-autogain-18-senal-debil-toma-1.csv",
+    "note":  "Datos experimentales. No usar para diagnostico medico."
+}

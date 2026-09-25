@@ -67,6 +67,10 @@ Captura estable toma 3: 2.250 registros, 0 descartados, 27.240 ms continuos
 `VALID`, sincronización mínima de 7 y LED fijo en `0x18`. Resultado: **PASS
 para contacto estable y ganancia fija**. Pendiente: aumento con señal débil.
 
+Señal débil toma 1: 2.251 registros, 0 descartados, subida `0x18 -> 0x20 ->
+0x28`, congelamiento al terminar la estabilización y cero publicaciones
+`VALID` durante ajuste o transitorios. Resultado: **PASS de autoganancia**.
+
 El replay se escribió en `0x10000` al 100 % y `esptool` verificó su hash.
 `measurements/biosys-1.0.18/replay-results.json` conserva los resultados.
 

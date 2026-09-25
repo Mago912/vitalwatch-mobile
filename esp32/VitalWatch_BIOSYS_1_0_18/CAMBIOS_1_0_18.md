@@ -104,3 +104,20 @@ dos canales. Resultado: **PASS para contacto estable y ganancia fija**.
 Esto valida el comportamiento técnico de la captura, no la exactitud clínica.
 Todavía falta una prueba separada de señal débil que obligue a subir la potencia
 antes de confirmar el contacto.
+
+## Captura física con señal débil, toma 1
+
+El protocolo comenzó sin dedo, continuó con el borde del dedo y terminó con
+contacto completo. Se conservaron 2.251 registros, cero descartados, tiempo
+exacto de 40.000 us y cero muestras perdidas.
+
+La potencia subió físicamente de `0x18` a `0x20` a los 15.000 ms y de `0x20` a
+`0x28` a los 15.680 ms. El contacto se confirmó a los 15.200 ms, la medición
+comenzó a los 19.200 ms y después no hubo más cambios de potencia.
+
+No se publicó ninguna frecuencia `VALID` durante la autoganancia ni durante los
+208 registros marcados como transitorio óptico. Resultado: **PASS para aumento
+con señal débil, congelamiento posterior y barrera de seguridad**.
+
+El protocolo fue dinámico y no se usa para evaluar una frecuencia estable. Esa
+capacidad ya quedó separadamente aprobada por la toma estable 3.
