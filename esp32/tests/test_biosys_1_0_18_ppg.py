@@ -54,20 +54,6 @@ class TestBiosys1018AutogainExperiment(unittest.TestCase):
         ):
             self.assertEqual(sha256(BASELINE / name), sha256(CANDIDATE / name), name)
 
-    def test_tooling_targets_1_0_18(self) -> None:
-        firmware_tool = read(ROOT / "scripts" / "esp32-firmware.ps1")
-        capture_tool = read(ROOT / "scripts" / "capture-biosys-research.ps1")
-        replay_tool = read(ROOT / "scripts" / "replay-biosys-ppg.ps1")
-        replay_test = read(ROOT / "scripts" / "test-biosys-ppg-replay.mjs")
-
-        self.assertIn("VitalWatch_BIOSYS_1_0_18", firmware_tool)
-        self.assertIn("biosys-1.0.18-research", firmware_tool)
-        self.assertIn("biosys-1.0.18-replay", firmware_tool)
-        self.assertIn("measurements\\biosys-1.0.18", capture_tool)
-        self.assertIn("BIOSYS 1.0.18", capture_tool)
-        self.assertIn("measurements\\biosys-1.0.18", replay_tool)
-        self.assertIn("VitalWatch_BIOSYS_1_0_18", replay_test)
-
     def test_documentation_preserves_research_boundary(self) -> None:
         changes = read(CANDIDATE / "CAMBIOS_1_0_18.md").lower()
         self.assertIn("autoganancia", changes)

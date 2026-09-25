@@ -1,0 +1,56 @@
+# Cambios de BIOSYS 1.0.19
+
+## Objetivo
+
+Promover al perfil normal la autoganancia del MAX30102 validada físicamente en
+BIOSYS 1.0.18, sin modificar los detectores, la fusión rojo/IR, las barreras de
+validez, el MPU, las caídas, SOS, medicamentos ni conectividad.
+
+## Cambio biomédico
+
+- inicio de ambos LED en `0x18`;
+- mínimo `0x18`, máximo `0x50` y paso `0x08`;
+- objetivo IR entre 45.000 y 95.000;
+- ajuste permitido antes de confirmar el contacto y durante cuatro segundos de
+  estabilización;
+- potencia congelada al comenzar la medición;
+- identidad BIOSYS 1.0.19 / SYS 0.9.9 / BIO 0.7.3;
+- experimento `PPG-AUTOGAIN-PRODUCT-19-A`.
+
+## Evidencia de origen
+
+BIOSYS 1.0.18 confirmó físicamente:
+
+- contacto estable: 2.250 registros, cero descartados y 27.240 ms continuos
+  `VALID` con LED fijo en `0x18`;
+- señal débil: subida `0x18 -> 0x20 -> 0x28`, congelamiento al terminar la
+  estabilización y cero publicaciones `VALID` durante ajuste o transitorios;
+- replay físico: 23/23 autotests y 4/4 datasets aprobados.
+
+La evidencia se conserva en `measurements/biosys-1.0.18`. No se atribuye como
+ejecución física de 1.0.19.
+
+## Criterio de salida
+
+Antes de instalar el perfil normal de 1.0.19 se exige:
+
+1. compilar producto, investigación y replay;
+2. aprobar pruebas estáticas y de host;
+3. ejecutar el replay en la placa;
+4. cargar el producto y verificar identidad, MAX30102 y conectividad;
+5. realizar una última captura estable.
+
+`VALID` expresa validez técnica interna. No constituye validación clínica,
+diagnóstico ni garantía de exactitud médica.
+
+## Compilación reproducible
+
+Los tres perfiles compilaron correctamente con Arduino CLI:
+
+| Perfil | Programa | RAM global | `.bin` | SHA-256 |
+|---|---:|---:|---:|---|
+| Producto | 1.183.772 B | 56.560 B | 1.183.920 B | `28C3DAD38EE36DEEE3102105344F9E5D8135A20AB050300291074B01D1A3E04C` |
+| Investigación | 1.186.452 B | 60.880 B | 1.186.608 B | `28CF51F7315C456F9854119F09D7860C67272079DA5879D91D52EC63DCCE2FCB` |
+| Replay | 486.680 B | 37.252 B | 486.832 B | `AA7582A7BB4FE553252BA9E970617D6F1DD8838CE55860D4BC658F85D9E45A43` |
+
+Estos datos demuestran compilación reproducible, no ejecución física.

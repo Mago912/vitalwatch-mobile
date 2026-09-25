@@ -19,7 +19,7 @@ const APPENDED_DIAGNOSTICS = [
 
 test('appends the dual-channel diagnostics to research output and capture schema', () => {
   const research = fs.readFileSync(path.join(
-    ROOT, 'esp32', 'VitalWatch_BIOSYS_1_0_18', 'BioResearch.cpp',
+    ROOT, 'esp32', 'VitalWatch_BIOSYS_1_0_19', 'BioResearch.cpp',
   ), 'utf8');
   const capture = fs.readFileSync(path.join(ROOT, 'scripts', 'capture-biosys-research.ps1'), 'utf8');
   for (const column of APPENDED_DIAGNOSTICS) {
