@@ -88,6 +88,13 @@ struct PPGSample {
   bool timingValid;
 };
 
+struct PpgMotionHint {
+  float accelerationDeltaG;
+  float gyroMagnitudeRadS;
+  bool saturated;
+  bool valid;
+};
+
 struct PPGDiagnostics {
   uint32_t sessionId;
   uint32_t samplesProcessed;
@@ -126,6 +133,7 @@ namespace PPGService {
   const SpO2Result& spo2();
   const PPGDiagnostics& diagnostics();
   const PPGSample& latestSample();
+  void setMotionHint(const PpgMotionHint &hint);
 
   // Camino offline/replay: procesa una muestra ya temporalizada sin tocar I2C.
   // El mismo pipeline de filtros/peaks/resultados se reutiliza para comparar

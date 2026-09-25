@@ -13,6 +13,7 @@
 #include "Interfaz.h"
 #include "Telemetria.h"
 #include "BioResearch.h"
+#include "BioReplay.h"
 
 // ============================================================================
 // [BIOSYS-C1] VITALWATCH VW-BIOSYS 1.0.14
@@ -491,6 +492,15 @@ void setup() {
 #endif
   delay(50); // solo para estabilizar el puerto durante el arranque
 
+#if BIO_REPLAY_MODE
+  // El replay arranca solo el pipeline matematico. No inicia Wi-Fi, TFT, I2C
+  // ni tareas que puedan consumir Serial o alterar el tiempo del dataset.
+  inicializarEstadoSistema();
+  PPGService::begin();
+  BioReplay::begin();
+  return;
+#endif
+
   // [BIOSYS-C3] Estado compartido antes de iniciar UI, sensores y red.
   inicializarEstadoSistema();
   inicializarBotones();
@@ -554,6 +564,12 @@ void setup() {
 // LOOP COOPERATIVO
 // ============================================================================
 void loop() {
+#if BIO_REPLAY_MODE
+  // Unico consumidor de Serial durante replay.
+  BioReplay::update();
+  yield();
+  return;
+#endif
   const uint32_t inicioLoopUs = micros();
   // 1) Aplica en este nucleo las ordenes que llegaron desde Supabase.
   procesarControlRemotoPantalla();
@@ -565,6 +581,14 @@ void loop() {
 
   // 3) Sensores. Ambos se atienden SIEMPRE, independientemente de la vista.
   MotionService::update();
+  const MotionSample &movimientoPpg = MotionService::latest();
+  const PpgMotionHint pistaMovimientoPpg = {
+    movimientoPpg.accelerationDeltaG,
+    movimientoPpg.gyroMagnitudeRadS,
+    movimientoPpg.accelSaturated || movimientoPpg.gyroSaturated,
+    movimientoPpg.valid
+  };
+  PPGService::setMotionHint(pistaMovimientoPpg);
   PPGService::update();
   procesarCambiosMedicacion();
   if (consumirCambioInterfazMensajeria() && modoActual == ModoSistema::MENSAJERIA) {

@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('build', 'stable-build', 'stable-upload', 'baseline-build', 'bio-build', 'bio-upload', 'bio-research-build', 'bio-research-upload', 'bio-replay-build', 'bio-replay-upload', 'biosys-build', 'biosys-upload', 'biosys-research-build', 'biosys-research-upload', 'ports', 'upload', 'monitor', 'tft-build', 'tft-upload')]
+  [ValidateSet('build', 'stable-build', 'stable-upload', 'baseline-build', 'bio-build', 'bio-upload', 'bio-research-build', 'bio-research-upload', 'bio-replay-build', 'bio-replay-upload', 'biosys-build', 'biosys-upload', 'biosys-research-build', 'biosys-research-upload', 'biosys-replay-build', 'biosys-replay-upload', 'ports', 'upload', 'monitor', 'tft-build', 'tft-upload')]
   [string]$Action = 'build',
   [string]$Port,
   [string]$Fqbn = 'esp32:esp32:esp32'
@@ -14,7 +14,7 @@ $sketchDirectory = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_1'
 $stableDirectory = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_0'
 $baselineDirectory = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_5_0'
 $bioDirectory = Join-Path $projectRoot 'esp32\VitalWatch_BIO_0_6_0'
-$biosysDirectory = Join-Path $projectRoot 'esp32\VitalWatch_BIOSYS_1_0_9'
+$biosysDirectory = Join-Path $projectRoot 'esp32\VitalWatch_BIOSYS_1_0_16'
 $tftTestDirectory = Join-Path $projectRoot 'esp32\tft_test'
 $deviceConfig = Join-Path $sketchDirectory 'vitalwatch_config.h'
 $stableDeviceConfig = Join-Path $stableDirectory 'vitalwatch_config.h'
@@ -24,8 +24,9 @@ $baselineBuildDirectory = Join-Path $projectRoot '.arduino\build\fw-0.5.0'
 $bioBuildDirectory = Join-Path $projectRoot '.arduino\build\bio-0.6.0'
 $bioResearchBuildDirectory = Join-Path $projectRoot '.arduino\build\bio-0.6.0-research'
 $bioReplayBuildDirectory = Join-Path $projectRoot '.arduino\build\bio-0.6.0-replay'
-$biosysBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.9'
-$biosysResearchBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.9-research'
+$biosysBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.16'
+$biosysResearchBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.16-research'
+$biosysReplayBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.16-replay'
 $tftBuildDirectory = Join-Path $projectRoot '.arduino\build\tft-test'
 
 function Invoke-ArduinoCli {
@@ -228,6 +229,14 @@ try {
     $devicePort = Resolve-DevicePort
     Build-Sketch -Sketch $biosysDirectory -OutputDirectory $biosysResearchBuildDirectory -Defines '-DBIO_RESEARCH_MODE=1'
     Upload-Build -DevicePort $devicePort -InputDirectory $biosysResearchBuildDirectory
+  }
+  'biosys-replay-build' {
+    Build-Sketch -Sketch $biosysDirectory -OutputDirectory $biosysReplayBuildDirectory -Defines '-DBIO_REPLAY_MODE=1 -DBIO_RESEARCH_MODE=0'
+  }
+  'biosys-replay-upload' {
+    $devicePort = Resolve-DevicePort
+    Build-Sketch -Sketch $biosysDirectory -OutputDirectory $biosysReplayBuildDirectory -Defines '-DBIO_REPLAY_MODE=1 -DBIO_RESEARCH_MODE=0'
+    Upload-Build -DevicePort $devicePort -InputDirectory $biosysReplayBuildDirectory
   }
   'ports' {
     Invoke-ArduinoCli @('board', 'list')

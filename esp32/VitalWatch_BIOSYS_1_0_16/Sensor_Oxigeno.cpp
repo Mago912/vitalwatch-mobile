@@ -72,6 +72,7 @@ uint32_t lastDisplayPublishMs=0;
 MeasurementSessionState session=MeasurementSessionState::WAITING_CONTACT;
 PPGDiagnostics diag={};
 PPGSample latest={0,0,0,0,false};
+PpgMotionHint latestMotionHint={0,0,false,false};
 
 uint32_t sequence=0;
 uint32_t sessionCounter=0;
@@ -428,6 +429,7 @@ const HeartRateResult& heartRateForTelemetry(){return hrTelemetry;}
 const SpO2Result& spo2(){return spDisplay;}
 const PPGDiagnostics& diagnostics(){return diag;}
 const PPGSample& latestSample(){return latest;}
+void setMotionHint(const PpgMotionHint &hint){latestMotionHint=hint;}
 
 void update(){
 #if BIO_REPLAY_MODE
@@ -478,7 +480,8 @@ void update(){
 void resetReplay(){
   contact=false;diag.contact=false;contactCandidateUs=noContactCandidateUs=0;sequence=0;lastServiceUs=0;
   lastEstimatedSampleUs=0;lastTimestampSequence=0;
-  irSmooth=0;lastAutogainMs=0;resetAlgorithms(false);resetDisplayResults();session=MeasurementSessionState::WAITING_CONTACT;
+  irSmooth=0;lastAutogainMs=0;latestMotionHint={0,0,false,false};
+  resetAlgorithms(false);hrTelemetry=hr;resetDisplayResults();session=MeasurementSessionState::WAITING_CONTACT;
 }
 void processReplaySample(const PPGSample&s){processSample(s);}
 }

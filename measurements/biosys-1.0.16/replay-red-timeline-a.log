@@ -1,0 +1,4 @@
+[REPLAY] RESET_OK
+[INFO][PPG] sesion=1 contacto confirmado; estabilizando
+[INFO][PPG] Estabilizacion completa; midiendo
+[REPLAY_RESULT] rows=2251 rejected=0 fused=0 valid=0 first_valid_us=0 longest_valid_ms=0 bpm_min=nan bpm_max=nan
