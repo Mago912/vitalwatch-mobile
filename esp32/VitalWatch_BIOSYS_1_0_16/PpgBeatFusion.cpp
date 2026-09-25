@@ -32,13 +32,13 @@ PpgFusedBeat PpgBeatFusion::acceptPair(){
   PpgFusedBeat result={timestamp,0,red_.prominence,ir_.prominence,true,false};
   pendingRed_=pendingIr_=false;
 
-  if(lastFusedUs_==0){lastFusedUs_=timestamp;recordSynchronization(true);return result;}
+  if(lastFusedUs_==0){lastFusedUs_=timestamp;recordSynchronization(true);return resultWithMetrics(result);}
   const uint64_t deltaUs=timestamp-lastFusedUs_;
   const uint32_t ibiMs=(uint32_t)(deltaUs/1000ULL);
   if(ibiMs<PpgFusionConfig::IBI_MIN_MS){
     result.fused=false;
     recordSynchronization(false);
-    return result;
+    return resultWithMetrics(result);
   }
   lastFusedUs_=timestamp;
   if(ibiMs>PpgFusionConfig::IBI_MAX_MS){
@@ -48,7 +48,7 @@ PpgFusedBeat PpgBeatFusion::acceptPair(){
     synchronizedSize_=synchronizedPosition_=0;
     recordSynchronization(true);
     result.historyReset=true;
-    return result;
+    return resultWithMetrics(result);
   }
 
   result.ibiMs=(uint16_t)ibiMs;
@@ -56,6 +56,19 @@ PpgFusedBeat PpgBeatFusion::acceptPair(){
   ibiPosition_=(ibiPosition_+1)%PpgFusionConfig::IBI_CAPACITY;
   if(ibiCount_<PpgFusionConfig::IBI_CAPACITY)++ibiCount_;
   recordSynchronization(true);
+  return resultWithMetrics(result);
+}
+
+PpgFusedBeat PpgBeatFusion::resultWithMetrics(const PpgFusedBeat &source) const{
+  PpgFusedBeat result=source;
+  result.ibiCount=ibiCount_;
+  result.synchronizedCount=synchronizedCount();
+  result.synchronizationWindowSize=synchronizedSize_;
+  if(!robustBpm(result.bpm,result.madRatio,result.rangeMs)){
+    result.bpm=NAN;
+    result.madRatio=NAN;
+    result.rangeMs=0;
+  }
   return result;
 }
 
@@ -75,14 +88,14 @@ PpgFusedBeat PpgBeatFusion::update(const PpgChannelObservation &red,
   }
   if(red.candidate&&!red.artifact){red_=red;pendingRed_=true;}
   if(ir.candidate&&!ir.artifact){ir_=ir;pendingIr_=true;}
-  if(!pendingRed_||!pendingIr_)return result;
+  if(!pendingRed_||!pendingIr_)return resultWithMetrics(result);
 
   const uint64_t difference=absoluteDifference(red_.timestampUs,ir_.timestampUs);
   if(difference<=PpgFusionConfig::MATCH_WINDOW_US)return acceptPair();
   if(red_.timestampUs<ir_.timestampUs)pendingRed_=false;
   else pendingIr_=false;
   recordSynchronization(false);
-  return result;
+  return resultWithMetrics(result);
 }
 
 uint8_t PpgBeatFusion::ibiCount() const{return ibiCount_;}

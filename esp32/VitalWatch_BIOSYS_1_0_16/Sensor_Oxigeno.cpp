@@ -9,6 +9,9 @@
 #include "SystemState.h"
 #include "BioResearch.h"
 #include "PpgSampleTimeline.h"
+#include "PpgChannelDetector.h"
+#include "PpgBeatFusion.h"
+#include "PpgValidityGate.h"
 #include <esp_timer.h>
 
 namespace PPGConfig {
@@ -41,8 +44,6 @@ constexpr uint32_t CONTACT_CONFIRM_US=120000UL;
 constexpr uint32_t CONTACT_LOST_CONFIRM_US=120000UL;
 constexpr uint32_t STABILIZE_MS=4000UL, SESSION_TIMEOUT_MS=45000UL, AUTOGAIN_MS=450UL;
 
-constexpr uint16_t IBI_MIN_MS=330, IBI_MAX_MS=1600; // no retunear aun
-constexpr uint8_t IBI_COUNT=8;
 constexpr int32_t SPO2_N=100, SPO2_NEW=25;
 // El FIFO ya queda en 25 Hz; no se descartan 3 de cada 4 muestras antes de
 // llenar la ventana MAXIM de 100 puntos (~4 s).
@@ -82,13 +83,19 @@ uint64_t lastEstimatedSampleUs=0;
 uint32_t lastTimestampSequence=0;
 uint64_t contactCandidateUs=0, noContactCandidateUs=0;
 bool contact=false, stabilizing=false;
-uint32_t stabilizingStartedMs=0, measuringStartedMs=0, lastAutogainMs=0;
+uint64_t stabilizingStartedUs=0, measuringStartedUs=0;
+uint32_t lastAutogainMs=0;
 uint32_t irSmooth=0;
 
-uint16_t ibis[PPGConfig::IBI_COUNT]={0}; uint8_t ibiCount=0, ibiPos=0;
-uint64_t lastAcceptedPeakUs=0, lastCustomPeakUs=0, lastSparkPeakUs=0;
 uint16_t lastIbiMs=0; float bpmInstant=0;
-float dcIR=0, filtered=0, prev1=0, prev2=0, valley=0, envelope=0, pulseAmpEma=0, lastPulseAmp=0;
+float dcIR=0, filtered=0;
+PpgChannelDetector redDetector;
+PpgChannelDetector irDetector;
+PpgBeatFusion beatFusion;
+PpgValidityGate validityGate;
+PpgGateDecision gateDecision={PpgDetectorState::NO_CONTACT,HeartRateStatus::NO_CONTACT,NAN,QR_NO_CONTACT,0,false};
+uint32_t lastProcessedSequence=0;
+uint64_t lastProcessedTimeUs=0;
 
 uint32_t irBuf[PPGConfig::SPO2_N]={0}, redBuf[PPGConfig::SPO2_N]={0};
 int32_t bufCount=0,newCount=0; uint8_t decim=0; bool bufferFull=false;
@@ -161,8 +168,12 @@ void publishDisplayResults(){
 }
 
 void resetAlgorithms(bool preserveResults=true){
-  memset(ibis,0,sizeof(ibis));ibiCount=ibiPos=0;lastAcceptedPeakUs=lastCustomPeakUs=lastSparkPeakUs=0;lastIbiMs=0;bpmInstant=0;
-  dcIR=filtered=prev1=prev2=valley=envelope=pulseAmpEma=lastPulseAmp=0;
+  redDetector.reset();irDetector.reset();beatFusion.reset();
+  validityGate.reset(contact?PpgDetectorState::CALIBRATING:PpgDetectorState::NO_CONTACT);
+  gateDecision={contact?PpgDetectorState::CALIBRATING:PpgDetectorState::NO_CONTACT,
+    contact?HeartRateStatus::INSUFFICIENT_DATA:HeartRateStatus::NO_CONTACT,
+    NAN,contact?QR_DETECTOR_CALIBRATING:QR_NO_CONTACT,0,false};
+  lastIbiMs=0;bpmInstant=0;dcIR=filtered=0;
   memset(irBuf,0,sizeof(irBuf));memset(redBuf,0,sizeof(redBuf));bufCount=newCount=0;decim=0;bufferFull=false;
   memset(spo2Hist,0,sizeof(spo2Hist));spo2Count=spo2Pos=0;
   maximSpO2=maximHR=0;maximSpO2Valid=maximHRValid=0;
@@ -174,78 +185,22 @@ void resetAlgorithms(bool preserveResults=true){
   }
 }
 
-uint16_t medianIbi(){
-  if(!ibiCount)return 0;uint16_t a[PPGConfig::IBI_COUNT];for(uint8_t i=0;i<ibiCount;++i)a[i]=ibis[i];
-  for(uint8_t i=0;i+1<ibiCount;++i)for(uint8_t j=i+1;j<ibiCount;++j)if(a[j]<a[i]){uint16_t t=a[i];a[i]=a[j];a[j]=t;}
-  return a[ibiCount/2];
-}
-
-bool robustBpm(float &out,bool &unstable){
-  out=NAN;unstable=false;
-  if(ibiCount<4)return false; const uint16_t med=medianIbi();if(!med)return false;
-  uint32_t sumDiff=0;uint16_t mn=65535,mx=0;
-  for(uint8_t i=0;i<ibiCount;++i){uint16_t v=ibis[i];mn=min(mn,v);mx=max(mx,v);sumDiff+=(v>med?v-med:med-v);}
-  const float variation=100.0f*(sumDiff/(float)ibiCount)/med; const float bpm=60000.0f/med;
-  const bool consistent=variation<=18.0f&&(mx-mn)<=260; const bool range=bpm>=35&&bpm<=190;
-  unstable=!consistent; if(!consistent||!range)return false;out=bpm;return true;
-}
-
-// [BIOSYS-H2] Fallback visual prudente: conserva el BPM mediano cuando hay
-// al menos tres intervalos y una señal ópticamente aceptable, aunque todavía
-// no cumpla la estabilidad estricta. Se marca como INESTABLE/APROX y nunca se
-// publica como frecuencia válida en la telemetría.
-bool approximateBpm(float &out){
-  out=NAN;
-  if(ibiCount<3)return false;
-  const uint16_t med=medianIbi();
-  if(!med)return false;
-  uint32_t sumDiff=0;uint16_t mn=65535,mx=0;
-  for(uint8_t i=0;i<ibiCount;++i){uint16_t v=ibis[i];mn=min(mn,v);mx=max(mx,v);sumDiff+=(v>med?v-med:med-v);}
-  const float variation=100.0f*(sumDiff/(float)ibiCount)/med;
-  const float bpm=60000.0f/med;
-  if(variation>35.0f||(mx-mn)>500||bpm<40.0f||bpm>180.0f)return false;
-  out=bpm;return true;
-}
-
-bool acceptPeak(uint64_t sampleUs,float amplitude){
-  if(lastAcceptedPeakUs){
-    const uint32_t ibi=(uint32_t)((sampleUs-lastAcceptedPeakUs)/1000ULL);
-    if(ibi<PPGConfig::IBI_MIN_MS)return false;
-    if(ibi<=PPGConfig::IBI_MAX_MS){
-      lastIbiMs=(uint16_t)ibi;ibis[ibiPos]=lastIbiMs;ibiPos=(ibiPos+1)%PPGConfig::IBI_COUNT;if(ibiCount<PPGConfig::IBI_COUNT)++ibiCount;
-      bpmInstant=60000.0f/ibi;
-    }else{ibiCount=ibiPos=0;bpmInstant=0;lastIbiMs=0;}
-  }
-  lastAcceptedPeakUs=sampleUs;
-  pulseAmpEma=(pulseAmpEma<=0)?amplitude:pulseAmpEma*0.80f+amplitude*0.20f;
-  return true;
-}
-
-uint8_t processPeaks(const PPGSample&s,float &acOut){
-  // [BIOSYS-G3] Detección dual de picos y aceptación temporal/amplitudinal.
+uint8_t diagnosticPeakBits(const PPGSample&s,const PpgChannelObservation &ir,
+                           const PpgFusedBeat &beat,float &acOut){
+  // [BIOSYS-G3] Los bits de research observan ambos detectores. Solo un latido
+  // rojo+IR fusionado tiene autoridad para alimentar IBI y FC.
   uint8_t bits=PEAK_NONE;
-  if(dcIR==0){dcIR=(float)s.ir;valley=0;acOut=0;return bits;}
-  dcIR+=0.010f*((float)s.ir-dcIR); const float ac=(float)s.ir-dcIR;acOut=ac;filtered+=0.22f*(ac-filtered);
-  envelope*=0.995f;const float absf=fabsf(filtered);if(absf>envelope)envelope=absf;if(filtered<valley)valley=filtered;
-  const bool localMax=prev1>prev2&&prev1>=filtered;
-  bool custom=false;
-  if(localMax){
-    const float amp=prev1-valley;lastPulseAmp=amp;const float th=(pulseAmpEma>0)?max(25.0f,pulseAmpEma*0.38f):max(25.0f,envelope*0.22f);
-    const bool refractory=!lastCustomPeakUs||((s.sampleTimeUs-lastCustomPeakUs)/1000ULL)>=PPGConfig::IBI_MIN_MS;
-    custom=refractory&&prev1>8.0f&&amp>=th&&amp<=15000.0f;
-    if(custom){bits|=PEAK_CUSTOM;lastCustomPeakUs=s.sampleTimeUs;}
-    valley=filtered;
-  }
+  if(dcIR==0)dcIR=(float)s.ir;
+  dcIR+=0.010f*((float)s.ir-dcIR);
+  acOut=(float)s.ir-dcIR;
+  filtered=ir.filtered;
+  if(ir.candidate)bits|=PEAK_CUSTOM;
   const bool spark=checkForBeat((int32_t)s.ir);
-  if(spark){bits|=PEAK_SPARKFUN;lastSparkPeakUs=s.sampleTimeUs;}
-
-  // Los dos detectores permanecen observables. El aceptador es comun y aplica
-  // el mismo periodo refractario usando TIEMPO DE MUESTRA, no tiempo de CPU.
-  if(custom||spark){
-    const uint32_t sinceMs=lastAcceptedPeakUs?(uint32_t)((s.sampleTimeUs-lastAcceptedPeakUs)/1000ULL):UINT32_MAX;
-    if(!lastAcceptedPeakUs||sinceMs>=PPGConfig::IBI_MIN_MS){if(acceptPeak(s.sampleTimeUs,max(30.0f,lastPulseAmp)))bits|=PEAK_ACCEPTED;}
-  }
-  prev2=prev1;prev1=filtered;return bits;
+  if(spark)bits|=PEAK_SPARKFUN;
+  if(beat.fused)bits|=PEAK_ACCEPTED;
+  lastIbiMs=beat.ibiMs;
+  bpmInstant=isfinite(beat.bpm)?beat.bpm:0;
+  return bits;
 }
 
 void addSpO2(int v){spo2Hist[spo2Pos]=v;spo2Pos=(spo2Pos+1)%PPGConfig::SPO2_HISTORY;if(spo2Count<PPGConfig::SPO2_HISTORY)++spo2Count;}
@@ -271,7 +226,7 @@ SignalQuality evaluateQuality(){
   if(!modOk)currentReasons|=QR_LOW_PULSATILITY;
   if(diag.missingSamplesInWindow)currentReasons|=QR_MISSING_SAMPLES;
   qualityAcceptable=dcOk&&!sat&&modOk&&!diag.missingSamplesInWindow;
-  qualityGood=qualityAcceptable&&diag.modulationIndexIR>=0.15f&&diag.modulationIndexRed>=0.10f&&ibiCount>=3;
+  qualityGood=qualityAcceptable&&diag.modulationIndexIR>=0.15f&&diag.modulationIndexRed>=0.10f&&beatFusion.ibiCount()>=3;
   return qualityGood?SignalQuality::GOOD:(qualityAcceptable?SignalQuality::FAIR:SignalQuality::POOR);
 }
 
@@ -308,7 +263,7 @@ void autoGain(){
   if(next!=led)setLed(next);
 }
 
-void onContact(){contact=true;diag.contact=true;diag.sessionId=++sessionCounter;stabilizing=true;stabilizingStartedMs=millis();lastAutogainMs=stabilizingStartedMs;resetAlgorithms(true);session=MeasurementSessionState::STABILIZING;hr={NAN,HeartRateStatus::INSUFFICIENT_DATA,SignalQuality::POOR,QR_NONE,latest.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};sp={NAN,SpO2Status::INSUFFICIENT_DATA,SignalQuality::POOR,QR_NONE,latest.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_SPO2,VitalWatchConfig::CALIBRATION_VERSION_SPO2};resetDisplayResults();Serial.printf("[INFO][PPG] sesion=%lu contacto confirmado; estabilizando\n",(unsigned long)diag.sessionId);}
+void onContact(){contact=true;diag.contact=true;diag.sessionId=++sessionCounter;stabilizing=true;stabilizingStartedUs=latest.sampleTimeUs;lastAutogainMs=millis();resetAlgorithms(true);session=MeasurementSessionState::STABILIZING;hr={NAN,HeartRateStatus::INSUFFICIENT_DATA,SignalQuality::POOR,QR_DETECTOR_CALIBRATING,latest.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};sp={NAN,SpO2Status::INSUFFICIENT_DATA,SignalQuality::POOR,QR_NONE,latest.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_SPO2,VitalWatchConfig::CALIBRATION_VERSION_SPO2};resetDisplayResults();Serial.printf("[INFO][PPG] sesion=%lu contacto confirmado; estabilizando\n",(unsigned long)diag.sessionId);}
 void onLostContact(){contact=false;diag.contact=false;stabilizing=false;contactCandidateUs=noContactCandidateUs=0;resetAlgorithms(true);session=MeasurementSessionState::WAITING_CONTACT;hr={NAN,HeartRateStatus::NO_CONTACT,SignalQuality::NO_SIGNAL,QR_NO_CONTACT,latest.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};sp={NAN,SpO2Status::NO_CONTACT,SignalQuality::NO_SIGNAL,QR_NO_CONTACT,latest.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_SPO2,VitalWatchConfig::CALIBRATION_VERSION_SPO2};resetDisplayResults();Serial.println(F("[INFO][PPG] Contacto perdido; esperando dedo"));}
 
 void updateContact(const PPGSample&s){
@@ -322,28 +277,18 @@ void updateContact(const PPGSample&s){
   }
 }
 
-void updateHRResult(const PPGSample&s){
-  const SignalQuality q=evaluateQuality();float robust=NAN;bool unstable=false;
-  if(diag.missingSamplesInWindow||!s.timingValid){hr={NAN,HeartRateStatus::TIMING_INVALID,q,(uint16_t)(currentReasons|QR_TIMING_INVALID),s.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};return;}
-  if(!contact){hr={NAN,HeartRateStatus::NO_CONTACT,SignalQuality::NO_SIGNAL,QR_NO_CONTACT,s.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};return;}
-  if(!qualityAcceptable&&bufferFull){hr={NAN,HeartRateStatus::LOW_QUALITY,q,currentReasons,s.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};return;}
-  if(robustBpm(robust,unstable)){
-    hr={robust,HeartRateStatus::VALID,q,currentReasons,s.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};
-    // La validez puede durar menos que el intervalo HTTPS de 5 s. Conservamos
-    // esta ultima lectura valida solo para que la telemetria no la pierda.
-    hrTelemetry=hr;
-    return;
-  }
-  if(qualityAcceptable&&maximHRValid&&maximHR>=40&&maximHR<=180){
-    hr={(float)maximHR,HeartRateStatus::UNSTABLE,q,(uint16_t)(currentReasons|QR_IBI_INCONSISTENT),s.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};
-    return;
-  }
-  float aproximado=NAN;
-  if(qualityAcceptable&&approximateBpm(aproximado)){
-    hr={aproximado,HeartRateStatus::UNSTABLE,q,(uint16_t)(currentReasons|QR_IBI_INCONSISTENT),s.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};
-    return;
-  }
-  hr={NAN,unstable?HeartRateStatus::UNSTABLE:HeartRateStatus::INSUFFICIENT_DATA,q,currentReasons,s.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};
+void applyHeartRateDecision(const PPGSample&s,const PpgGateDecision &decision){
+  SignalQuality quality=SignalQuality::POOR;
+  if(decision.status==HeartRateStatus::VALID)quality=SignalQuality::GOOD;
+  else if(decision.status==HeartRateStatus::UNSTABLE)quality=SignalQuality::FAIR;
+  else if(decision.status==HeartRateStatus::NO_CONTACT)quality=SignalQuality::NO_SIGNAL;
+  else if(decision.status==HeartRateStatus::TIMING_INVALID)quality=SignalQuality::INVALID;
+  hr={decision.bpm,decision.status,quality,decision.qualityReasons,
+    s.sampleTimeUs,VitalWatchConfig::ALGORITHM_VERSION_HR};
+  if(hr.status==HeartRateStatus::VALID&&isfinite(hr.bpm))hrTelemetry=hr;
+  else if(hr.status==HeartRateStatus::NO_CONTACT||
+          hr.status==HeartRateStatus::TIMING_INVALID||
+          hr.status==HeartRateStatus::LOW_QUALITY)hrTelemetry=hr;
 }
 
 void finishResearchRecord(const PPGSample&s,float ac,uint8_t peaks,uint32_t processingStart){
@@ -354,10 +299,17 @@ void finishResearchRecord(const PPGSample&s,float ac,uint8_t peaks,uint32_t proc
 
 void processSample(const PPGSample&s){
   // [BIOSYS-G7] Canal único por muestra: timing, contacto, calidad, HR, SpO2 e investigación.
-  const uint32_t processingStart=micros();latest=s;++diag.samplesProcessed;
-  if(!s.timingValid)++diag.timingInvalidSamples;
+  const uint32_t processingStart=micros();
+  PPGSample checked=s;
+  const bool sequenceValid=lastProcessedSequence==0||s.sequence==lastProcessedSequence+1;
+  const bool timeValid=lastProcessedTimeUs==0||s.sampleTimeUs>lastProcessedTimeUs;
+  if(!sequenceValid||!timeValid)checked.timingValid=false;
+  lastProcessedSequence=s.sequence;
+  lastProcessedTimeUs=s.sampleTimeUs;
+  latest=checked;++diag.samplesProcessed;
+  if(!checked.timingValid)++diag.timingInvalidSamples;
   diag.missingSamplesInWindow=missingSamplesRemaining>0;
-  if(irSmooth==0)irSmooth=s.ir;else irSmooth=(uint32_t)(((uint64_t)irSmooth*7ULL+s.ir)/8ULL);
+  if(irSmooth==0)irSmooth=checked.ir;else irSmooth=(uint32_t)(((uint64_t)irSmooth*7ULL+checked.ir)/8ULL);
 
   // En BIO 0.6.0 la autoganancia solo se ejecutaba despues de confirmar el
   // contacto. Eso dejaba sin salida a una señal de dedo real que superaba el
@@ -365,29 +317,53 @@ void processSample(const PPGSample&s){
   // El ajuste previo conserva exactamente los mismos limites y pasos; solo
   // corrige el orden para que la ganancia pueda ayudar a confirmar el dedo.
   const uint32_t nowMs=millis();
+#if !BIO_REPLAY_MODE
   if(!contact && irSmooth>=PPGConfig::AUTOGAIN_START &&
      nowMs-lastAutogainMs>=PPGConfig::AUTOGAIN_MS){
     lastAutogainMs=nowMs;
     autoGain();
   }
+#endif
 
-  updateContact(s);if(!contact){finishResearchRecord(s,0,PEAK_NONE,processingStart);return;}
-
-  if(stabilizing){
-    if(nowMs-lastAutogainMs>=PPGConfig::AUTOGAIN_MS){lastAutogainMs=nowMs;autoGain();}
-    if(nowMs-stabilizingStartedMs>=PPGConfig::STABILIZE_MS){stabilizing=false;measuringStartedMs=nowMs;resetAlgorithms(true);session=MeasurementSessionState::MEASURING;Serial.println(F("[INFO][PPG] Estabilizacion completa; midiendo"));}
-    finishResearchRecord(s,0,PEAK_NONE,processingStart);return;
+  updateContact(checked);if(!contact){
+    gateDecision=validityGate.update(checked,latestMotionHint,{},{},{},false,false);
+    applyHeartRateDecision(checked,gateDecision);
+    finishResearchRecord(checked,0,PEAK_NONE,processingStart);return;
   }
 
-  float ac=0;const uint8_t peaks=processPeaks(s,ac);pushSpO2(s.red,s.ir);updateHRResult(s);publishDisplayResults();
+  if(stabilizing){
+#if !BIO_REPLAY_MODE
+    if(nowMs-lastAutogainMs>=PPGConfig::AUTOGAIN_MS){lastAutogainMs=nowMs;autoGain();}
+#endif
+    if(checked.sampleTimeUs>=stabilizingStartedUs&&
+       checked.sampleTimeUs-stabilizingStartedUs>=PPGConfig::STABILIZE_MS*1000ULL){
+      stabilizing=false;measuringStartedUs=checked.sampleTimeUs;resetAlgorithms(true);
+      session=MeasurementSessionState::MEASURING;
+      Serial.println(F("[INFO][PPG] Estabilizacion completa; midiendo"));
+    }
+    finishResearchRecord(checked,0,PEAK_NONE,processingStart);return;
+  }
+
+  const PpgChannelObservation red=redDetector.update(checked.red,checked.sampleTimeUs);
+  const PpgChannelObservation ir=irDetector.update(checked.ir,checked.sampleTimeUs);
+  const PpgFusedBeat beat=beatFusion.update(red,ir);
+  if(beat.fused){redDetector.confirmFused(beat.redProminence);irDetector.confirmFused(beat.irProminence);}
+  gateDecision=validityGate.update(checked,latestMotionHint,red,ir,beat,contact,
+    diag.missingSamplesInWindow);
+  applyHeartRateDecision(checked,gateDecision);
+  if(gateDecision.resetPipeline){redDetector.reset();irDetector.reset();beatFusion.reset();}
+  float ac=0;const uint8_t peaks=diagnosticPeakBits(checked,ir,beat,ac);
+  pushSpO2(checked.red,checked.ir);publishDisplayResults();
   if(hr.status==HeartRateStatus::VALID||
      (hr.status==HeartRateStatus::UNSTABLE&&!isnan(hr.bpm))||
      sp.status==SpO2Status::EXPERIMENTAL_VALID)session=MeasurementSessionState::RESULT_READY;
-  else if((millis()-measuringStartedMs)>=PPGConfig::SESSION_TIMEOUT_MS)session=MeasurementSessionState::TIMEOUT;
+  else if(checked.sampleTimeUs>=measuringStartedUs&&
+          checked.sampleTimeUs-measuringStartedUs>=PPGConfig::SESSION_TIMEOUT_MS*1000ULL)
+    session=MeasurementSessionState::TIMEOUT;
   else if(hr.status==HeartRateStatus::LOW_QUALITY||sp.status==SpO2Status::LOW_QUALITY)session=MeasurementSessionState::LOW_QUALITY;
   else session=MeasurementSessionState::MEASURING;
 
-  finishResearchRecord(s,ac,peaks,processingStart);
+  finishResearchRecord(checked,ac,peaks,processingStart);
 }
 
 bool connectSensor(){
@@ -406,6 +382,7 @@ bool connectSensor(){
   sensor.setup(led,PPGConfig::FIFO_AVG,PPGConfig::LED_MODE,PPGConfig::SENSOR_RATE,PPGConfig::PULSE_WIDTH_US,PPGConfig::ADC_RANGE);
   setLed(led);sensor.setPulseAmplitudeGreen(0);sensor.clearFIFO();I2CBusService::restoreConfig();
   sequence=0;lastServiceUs=0;lastEstimatedSampleUs=0;lastTimestampSequence=0;
+  lastProcessedSequence=0;lastProcessedTimeUs=0;
   contact=false;diag.contact=false;contactCandidateUs=noContactCandidateUs=0;irSmooth=0;lastAutogainMs=0;resetAlgorithms(false);resetDisplayResults();session=MeasurementSessionState::WAITING_CONTACT;
   Serial.printf("[INFO][PPG] MAX30102 PART_ID=0x%02X %uHz/AVG%u => ~%lu FIFO records/s\n",diag.partId,(unsigned)PPGConfig::SENSOR_RATE,(unsigned)PPGConfig::FIFO_AVG,(unsigned long)PPGConfig::EFFECTIVE_RATE_HZ);
   return true;
@@ -425,6 +402,7 @@ void forceReconnect(){connectSensor();}
 bool isReady(){return systemHealth.ppgReady;}
 MeasurementSessionState sessionState(){return session;}
 const HeartRateResult& heartRate(){return hrDisplay;}
+const HeartRateResult& heartRateInstant(){return hr;}
 const HeartRateResult& heartRateForTelemetry(){return hrTelemetry;}
 const SpO2Result& spo2(){return spDisplay;}
 const PPGDiagnostics& diagnostics(){return diag;}
@@ -479,7 +457,7 @@ void update(){
 
 void resetReplay(){
   contact=false;diag.contact=false;contactCandidateUs=noContactCandidateUs=0;sequence=0;lastServiceUs=0;
-  lastEstimatedSampleUs=0;lastTimestampSequence=0;
+  lastEstimatedSampleUs=0;lastTimestampSequence=0;lastProcessedSequence=0;lastProcessedTimeUs=0;
   irSmooth=0;lastAutogainMs=0;latestMotionHint={0,0,false,false};
   resetAlgorithms(false);hrTelemetry=hr;resetDisplayResults();session=MeasurementSessionState::WAITING_CONTACT;
 }

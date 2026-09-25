@@ -15,6 +15,12 @@ namespace PpgGateConfig {
   constexpr float SEVERE_DELTA_G=0.20f;
   constexpr float SEVERE_GYRO_RAD_S=0.75f;
   constexpr uint32_t QUARANTINE_QUIET_US=4000000UL;
+  constexpr uint32_t CLEAN_REQUIRED_US=5000000UL;
+  constexpr float SNR_MIN=1.50f;
+  constexpr float MAD_RATIO_MAX=0.12f;
+  constexpr uint16_t IBI_RANGE_MAX_MS=300;
+  constexpr uint8_t MIN_IBI_COUNT=6;
+  constexpr uint8_t MIN_SYNCHRONIZED=6;
 }
 
 enum class PpgDetectorState : uint8_t {
@@ -58,7 +64,9 @@ class PpgValidityGate {
   bool previousOpticalValid_;
   uint8_t moderateMotionCount_;
   uint64_t quietStartedUs_;
+  uint64_t cleanStartedUs_;
   uint64_t lastTimestampUs_;
+  float publishedBpm_;
 };
 
 #endif

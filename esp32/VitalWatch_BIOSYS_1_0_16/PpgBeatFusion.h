@@ -18,6 +18,12 @@ struct PpgFusedBeat {
   float irProminence;
   bool fused;
   bool historyReset;
+  uint8_t ibiCount;
+  uint8_t synchronizedCount;
+  uint8_t synchronizationWindowSize;
+  float bpm;
+  float madRatio;
+  uint16_t rangeMs;
 };
 
 class PpgBeatFusion {
@@ -33,6 +39,7 @@ class PpgBeatFusion {
  private:
   void recordSynchronization(bool synchronized);
   PpgFusedBeat acceptPair();
+  PpgFusedBeat resultWithMetrics(const PpgFusedBeat &result) const;
   static uint64_t absoluteDifference(uint64_t left,uint64_t right);
 
   bool pendingRed_;

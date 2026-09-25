@@ -129,6 +129,7 @@ namespace PPGService {
   bool isReady();
   MeasurementSessionState sessionState();
   const HeartRateResult& heartRate();
+  const HeartRateResult& heartRateInstant();
   const HeartRateResult& heartRateForTelemetry();
   const SpO2Result& spo2();
   const PPGDiagnostics& diagnostics();

@@ -131,6 +131,127 @@ PpgGateDecision gateUpdate(PpgValidityGate &gate,const PPGSample &sample,
     fusionObservation(sample.sampleTimeUs,false),PpgFusedBeat{},true,false);
 }
 
+PpgChannelObservation validityObservation(uint64_t timestampUs,float snr){
+  return {timestampUs,0,100,10,snr,true,false,false};
+}
+
+PpgFusedBeat validityBeat(uint64_t timestampUs,uint8_t synchronizedCount=6,
+                          uint8_t synchronizationWindowSize=6){
+  return {timestampUs,750,100,100,true,false,6,synchronizedCount,
+    synchronizationWindowSize,80.0f,0.0f,0};
+}
+
+PpgGateDecision validityGateProbe(float redSnr,float irSnr,uint8_t syncCount,
+                                  uint8_t syncWindow){
+  PpgValidityGate gate;
+  gate.reset(PpgDetectorState::CALIBRATING);
+  const PPGSample first=gateSample(1000000);
+  gate.update(first,gateMotion(),validityObservation(first.sampleTimeUs,redSnr),
+    validityObservation(first.sampleTimeUs,irSnr),PpgFusedBeat{},true,false);
+  const PPGSample final=gateSample(6000000);
+  return gate.update(final,gateMotion(),validityObservation(final.sampleTimeUs,redSnr),
+    validityObservation(final.sampleTimeUs,irSnr),
+    validityBeat(final.sampleTimeUs,syncCount,syncWindow),true,false);
+}
+
+struct ProductionTestOutcome {
+  HeartRateStatus status;
+  float bpm;
+  uint16_t reasons;
+  uint32_t longestValidMs;
+};
+
+uint32_t stable80Wave(uint32_t sampleIndex,uint32_t phaseOffset){
+  const uint32_t phase=(sampleIndex+phaseOffset)%75UL;
+  static const uint8_t pulse[9]={0,1,3,6,10,7,4,2,1};
+  // Un dither determinista de pocos counts representa el piso de ruido y
+  // permite que la calibración distinga ruido (P25) de pulso (P90).
+  const uint32_t dither=(sampleIndex%4UL==1UL)?3UL:0UL;
+  return 80000UL+dither+(phase<9?((uint32_t)pulse[phase]*600UL)/10UL:0UL);
+}
+
+ProductionTestOutcome feedStableProduction(uint32_t durationMs=20000){
+  PPGService::resetReplay();
+  PPGService::setMotionHint(gateMotion());
+  uint64_t validStartedUs=0;
+  uint32_t longest=0;
+  const uint32_t samples=durationMs/10UL;
+  for(uint32_t index=1;index<=samples;++index){
+    const PPGSample sample={stable80Wave(index,0),stable80Wave(index,0),index,
+      (uint64_t)index*10000ULL,true};
+    PPGService::processReplaySample(sample);
+    const HeartRateResult &current=PPGService::heartRateInstant();
+    if(current.status==HeartRateStatus::VALID&&isfinite(current.bpm)){
+      if(validStartedUs==0)validStartedUs=sample.sampleTimeUs;
+      const uint32_t span=(uint32_t)((sample.sampleTimeUs-validStartedUs)/1000ULL);
+      if(span>longest)longest=span;
+    }else validStartedUs=0;
+  }
+  const HeartRateResult &result=PPGService::heartRateInstant();
+  return {result.status,result.bpm,result.qualityReasons,longest};
+}
+
+ProductionTestOutcome currentProductionOutcome(uint32_t longest=0){
+  const HeartRateResult &result=PPGService::heartRateInstant();
+  return {result.status,result.bpm,result.qualityReasons,longest};
+}
+
+bool runValiditySelfTest(const char *name,ProductionTestOutcome &outcome){
+  if(strcmp(name,"VALID_STABLE_SYNTHETIC")==0){
+    outcome=feedStableProduction();
+    return outcome.status==HeartRateStatus::VALID&&isfinite(outcome.bpm)&&
+      fabsf(outcome.bpm-80.0f)<=2.0f&&outcome.longestValidMs>=5000;
+  }
+  if(strcmp(name,"INVALID_TIMING_FALSE")==0||
+     strcmp(name,"INVALID_SEQUENCE_GAP")==0||
+     strcmp(name,"INVALID_TIME_REVERSE")==0){
+    outcome=feedStableProduction();
+    if(outcome.status!=HeartRateStatus::VALID)return false;
+    const PPGSample last=PPGService::latestSample();
+    PPGSample invalid={stable80Wave(last.sequence+1,0),stable80Wave(last.sequence+1,0),
+      last.sequence+1,last.sampleTimeUs+10000ULL,true};
+    if(strcmp(name,"INVALID_TIMING_FALSE")==0)invalid.timingValid=false;
+    else if(strcmp(name,"INVALID_SEQUENCE_GAP")==0)++invalid.sequence;
+    else invalid.sampleTimeUs=last.sampleTimeUs-10000ULL;
+    PPGService::processReplaySample(invalid);
+    outcome=currentProductionOutcome();
+    return outcome.status==HeartRateStatus::TIMING_INVALID&&isnan(outcome.bpm)&&
+      (outcome.reasons&QR_TIMING_INVALID)!=0;
+  }
+  if(strcmp(name,"RESET_AFTER_VALID")==0){
+    outcome=feedStableProduction();
+    if(outcome.status!=HeartRateStatus::VALID)return false;
+    PPGSample last=PPGService::latestSample();
+    for(uint32_t index=1;index<=100;++index){
+      const PPGSample removed={1000,1000,last.sequence+index,
+        last.sampleTimeUs+(uint64_t)index*10000ULL,true};
+      PPGService::processReplaySample(removed);
+    }
+    outcome=currentProductionOutcome();
+    return outcome.status==HeartRateStatus::NO_CONTACT&&isnan(outcome.bpm);
+  }
+
+  PpgGateDecision decision={};
+  if(strcmp(name,"INVALID_CHANNEL_RATIO")==0){
+    decision=validityGateProbe(2.0f,2.0f,5,8);
+    outcome={decision.status,decision.bpm,decision.qualityReasons,0};
+    return decision.status==HeartRateStatus::UNSTABLE&&
+      (decision.qualityReasons&QR_CHANNEL_MISMATCH)!=0;
+  }
+  if(strcmp(name,"INVALID_SNR")==0){
+    decision=validityGateProbe(1.49f,2.0f,6,8);
+    outcome={decision.status,decision.bpm,decision.qualityReasons,0};
+    return decision.status==HeartRateStatus::LOW_QUALITY&&isnan(decision.bpm);
+  }
+  if(strcmp(name,"VALID_SNR_BOUNDARY")==0){
+    decision=validityGateProbe(1.50f,1.50f,6,8);
+    outcome={decision.status,decision.bpm,decision.qualityReasons,0};
+    return decision.status==HeartRateStatus::VALID&&
+      fabsf(decision.bpm-80.0f)<0.01f;
+  }
+  return false;
+}
+
 bool runGateSelfTest(const char *name,PpgGateDecision &result){
   PpgValidityGate gate;
   gate.reset(PpgDetectorState::TRACKING);
@@ -204,6 +325,19 @@ void runSelfTest(const char *name){
       (unsigned)result.status,(unsigned)result.qualityReasons,
       (unsigned long)result.quarantineRemainingMs,result.resetPipeline?1u:0u
     );
+    return;
+  }else if(strncmp(name,"VALID_",6)==0||strncmp(name,"INVALID_",8)==0||
+           strcmp(name,"RESET_AFTER_VALID")==0){
+    ProductionTestOutcome outcome={};
+    passed=runValiditySelfTest(name,outcome);
+    Serial.printf(
+      "[SELFTEST] %s %s status=%u bpm=",name,passed?"PASS":"FAIL",
+      (unsigned)outcome.status
+    );
+    if(isfinite(outcome.bpm))Serial.printf("%.2f",outcome.bpm);
+    else Serial.print(F("nan"));
+    Serial.printf(" reasons=0x%04X longest_valid_ms=%lu\n",
+      (unsigned)outcome.reasons,(unsigned long)outcome.longestValidMs);
     return;
   }
   Serial.printf(
