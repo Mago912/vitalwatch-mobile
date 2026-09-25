@@ -93,7 +93,7 @@ try {
 }
 
 $metadata = [ordered]@{
-  firmware = 'BIOSYS 1.0.15'
+  firmware = 'BIOSYS 1.0.16'
   mode = 'BIO_RESEARCH_MODE=1'
   label = $Label
   port = $Port

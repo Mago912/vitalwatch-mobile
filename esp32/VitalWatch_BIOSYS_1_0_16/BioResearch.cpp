@@ -27,7 +27,9 @@ constexpr uint8_t QUEUE_SIZE=8;
 Record queue[QUEUE_SIZE];
 uint8_t head=0,tail=0,count=0;
 uint32_t dropped=0;
-char tx[1024];
+// Las filas físicas 1.0.15 ocuparon como máximo 304 caracteres; los doce
+// diagnósticos añadidos mantienen margen amplio dentro del buffer histórico.
+char tx[768];
 size_t txLen=0,txPos=0;
 
 bool enqueue(const Record &record){
