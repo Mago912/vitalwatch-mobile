@@ -1,5 +1,7 @@
 #include "../../VitalWatch_BIOSYS_1_0_16/PpgChannelDetector.h"
 #include "../../VitalWatch_BIOSYS_1_0_16/PpgChannelDetector.cpp"
+#include "../../VitalWatch_BIOSYS_1_0_16/PpgBeatFusion.h"
+#include "../../VitalWatch_BIOSYS_1_0_16/PpgBeatFusion.cpp"
 
 static_assert(PpgChannelConfig::CALIBRATION_SAMPLES == 50, "calibration");
 static_assert(PpgChannelConfig::PROMINENCE_CAPACITY == 32, "fixed ring");
@@ -25,7 +27,7 @@ bool channelWeak() {
   PpgChannelDetector detector;
   detector.reset();
   uint16_t candidates=0,artifacts=0;
-  for(uint32_t index=0;index<350;++index){
+  for(uint32_t index=0;index<400;++index){
     const uint32_t raw=index<60?80000UL:weakWave(index-60);
     const PpgChannelObservation observation=detector.update(
       raw,(uint64_t)index*40000ULL
@@ -43,8 +45,10 @@ bool channelOutlier() {
   for(uint32_t index=0;index<60;++index)
     detector.update(80000UL,(uint64_t)index*40000ULL);
 
-  for(uint8_t pulse=0;pulse<9;++pulse){
-    const uint16_t amplitude=pulse==4?840:120;
+  // Cuatro pulsos calibran percentiles; cinco normales garantizan cuatro
+  // fusiones para la mediana, el decimo es el outlier y luego hay cuatro normales.
+  for(uint8_t pulse=0;pulse<14;++pulse){
+    const uint16_t amplitude=pulse==9?840:120;
     for(uint8_t phase=0;phase<25;++phase){
       const uint32_t index=60UL+(uint32_t)pulse*25UL+phase;
       const PpgChannelObservation observation=detector.update(
@@ -53,12 +57,58 @@ bool channelOutlier() {
       if(observation.artifact)++artifacts;
       if(observation.candidate){
         ++candidates;
-        if(pulse>4)++normalAfterOutlier;
+        if(pulse>9)++normalAfterOutlier;
         detector.confirmFused(observation.prominence);
       }
     }
   }
   return candidates>=8 && artifacts==1 && normalAfterOutlier>=4;
+}
+
+PpgChannelObservation candidate(uint64_t timestampUs,bool present=true){
+  return {timestampUs,0,100,10,10,true,present,false};
+}
+
+bool fusionPaired(){
+  PpgBeatFusion fusion;
+  fusion.reset();
+  return fusion.update(candidate(1000000),candidate(1080000)).fused;
+}
+
+bool fusionRedOnly(){
+  PpgBeatFusion fusion;
+  fusion.reset();
+  return !fusion.update(candidate(1000000),candidate(1000000,false)).fused;
+}
+
+bool fusionIrOnly(){
+  PpgBeatFusion fusion;
+  fusion.reset();
+  return !fusion.update(candidate(1000000,false),candidate(1000000)).fused;
+}
+
+bool fusionTooFar(){
+  PpgBeatFusion fusion;
+  fusion.reset();
+  return !fusion.update(candidate(1000000),candidate(1160000)).fused;
+}
+
+bool fusionLongGap(){
+  PpgBeatFusion fusion;
+  fusion.reset();
+  fusion.update(candidate(1000000),candidate(1000000));
+  const PpgFusedBeat result=fusion.update(candidate(2640000),candidate(2640000));
+  return result.fused&&result.historyReset&&fusion.ibiCount()==0;
+}
+
+bool fusionRollover(){
+  PpgBeatFusion fusion;
+  fusion.reset();
+  fusion.update(candidate(4294920000ULL),candidate(4294920000ULL));
+  const PpgFusedBeat result=fusion.update(
+    candidate(4295680000ULL),candidate(4295680000ULL)
+  );
+  return result.fused&&result.ibiMs==760;
 }
 }
 
@@ -67,7 +117,9 @@ void setup() {
   detector.reset();
   const PpgChannelObservation observation=detector.update(100000,40000);
   if(observation.candidate || observation.artifact)abort();
-  if(!channelWeak() || !channelOutlier())abort();
+  if(!channelWeak() || !channelOutlier() || !fusionPaired() ||
+     !fusionRedOnly() || !fusionIrOnly() || !fusionTooFar() ||
+     !fusionLongGap() || !fusionRollover())abort();
 }
 
 void loop() {}

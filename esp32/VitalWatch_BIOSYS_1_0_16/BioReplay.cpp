@@ -2,6 +2,7 @@
 #include "Configuracion.h"
 #include "Sensor_Oxigeno.h"
 #include "PpgChannelDetector.h"
+#include "PpgBeatFusion.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -34,7 +35,7 @@ bool selfTestChannelWeak(uint16_t &candidates,uint16_t &artifacts){
   PpgChannelDetector detector;
   detector.reset();
   candidates=artifacts=0;
-  for(uint32_t index=0;index<350;++index){
+  for(uint32_t index=0;index<400;++index){
     const uint32_t raw=index<60?80000UL:weakWave(index-60);
     const PpgChannelObservation observation=detector.update(
       raw,(uint64_t)index*40000ULL
@@ -52,8 +53,8 @@ bool selfTestChannelOutlier(uint16_t &candidates,uint16_t &artifacts,
   candidates=artifacts=normalAfterOutlier=0;
   for(uint32_t index=0;index<60;++index)
     detector.update(80000UL,(uint64_t)index*40000ULL);
-  for(uint8_t pulse=0;pulse<9;++pulse){
-    const uint16_t amplitude=pulse==4?840:120;
+  for(uint8_t pulse=0;pulse<14;++pulse){
+    const uint16_t amplitude=pulse==9?840:120;
     for(uint8_t phase=0;phase<25;++phase){
       const uint32_t index=60UL+(uint32_t)pulse*25UL+phase;
       const PpgChannelObservation observation=detector.update(
@@ -62,12 +63,57 @@ bool selfTestChannelOutlier(uint16_t &candidates,uint16_t &artifacts,
       if(observation.artifact)++artifacts;
       if(observation.candidate){
         ++candidates;
-        if(pulse>4)++normalAfterOutlier;
+        if(pulse>9)++normalAfterOutlier;
         detector.confirmFused(observation.prominence);
       }
     }
   }
   return candidates>=8&&artifacts==1&&normalAfterOutlier>=4;
+}
+
+PpgChannelObservation fusionObservation(uint64_t timestampUs,bool present=true){
+  return {timestampUs,0,100,10,10,true,present,false};
+}
+
+bool runFusionSelfTest(const char *name,PpgFusedBeat &result,
+                       uint8_t &ibiCount,uint8_t &synchronizedCount){
+  PpgBeatFusion fusion;
+  fusion.reset();
+  if(strcmp(name,"FUSION_PAIRED")==0){
+    result=fusion.update(fusionObservation(1000000),fusionObservation(1080000));
+    ibiCount=fusion.ibiCount();synchronizedCount=fusion.synchronizedCount();
+    return result.fused;
+  }
+  if(strcmp(name,"FUSION_RED_ONLY")==0){
+    result=fusion.update(fusionObservation(1000000),fusionObservation(1000000,false));
+    ibiCount=fusion.ibiCount();synchronizedCount=fusion.synchronizedCount();
+    return !result.fused;
+  }
+  if(strcmp(name,"FUSION_IR_ONLY")==0){
+    result=fusion.update(fusionObservation(1000000,false),fusionObservation(1000000));
+    ibiCount=fusion.ibiCount();synchronizedCount=fusion.synchronizedCount();
+    return !result.fused;
+  }
+  if(strcmp(name,"FUSION_TOO_FAR")==0){
+    result=fusion.update(fusionObservation(1000000),fusionObservation(1160000));
+    ibiCount=fusion.ibiCount();synchronizedCount=fusion.synchronizedCount();
+    return !result.fused;
+  }
+  if(strcmp(name,"FUSION_LONG_GAP")==0){
+    fusion.update(fusionObservation(1000000),fusionObservation(1000000));
+    result=fusion.update(fusionObservation(2640000),fusionObservation(2640000));
+    ibiCount=fusion.ibiCount();synchronizedCount=fusion.synchronizedCount();
+    return result.fused&&result.historyReset&&ibiCount==0;
+  }
+  if(strcmp(name,"FUSION_ROLLOVER")==0){
+    fusion.update(fusionObservation(4294920000ULL),fusionObservation(4294920000ULL));
+    result=fusion.update(
+      fusionObservation(4295680000ULL),fusionObservation(4295680000ULL)
+    );
+    ibiCount=fusion.ibiCount();synchronizedCount=fusion.synchronizedCount();
+    return result.fused&&result.ibiMs==760;
+  }
+  return false;
 }
 
 void runSelfTest(const char *name){
@@ -77,8 +123,15 @@ void runSelfTest(const char *name){
     passed=selfTestChannelWeak(candidates,artifacts);
   }else if(strcmp(name,"CHANNEL_OUTLIER")==0){
     passed=selfTestChannelOutlier(candidates,artifacts,normalAfter);
-  }else{
-    Serial.printf("[SELFTEST] %s FAIL reason=unknown\n",name);
+  }else if(strncmp(name,"FUSION_",7)==0){
+    PpgFusedBeat result={};
+    uint8_t ibiCount=0,synchronizedCount=0;
+    passed=runFusionSelfTest(name,result,ibiCount,synchronizedCount);
+    Serial.printf(
+      "[SELFTEST] %s %s fused=%u ibi_ms=%u reset=%u ibi_count=%u sync=%u\n",
+      name,passed?"PASS":"FAIL",result.fused?1u:0u,(unsigned)result.ibiMs,
+      result.historyReset?1u:0u,(unsigned)ibiCount,(unsigned)synchronizedCount
+    );
     return;
   }
   Serial.printf(

@@ -18,7 +18,9 @@ PpgChannelDetector::PpgChannelDetector(){reset();}
 void PpgChannelDetector::reset(){
   initialized_=false;
   calibrated_=false;
+  calibrationSamples_=0;
   calibrationCount_=0;
+  calibrationPosition_=0;
   memset(calibration_,0,sizeof(calibration_));
   dc_=filtered_=previous1_=previous2_=valley_=0;
   previousTimestampUs_=0;
@@ -29,7 +31,7 @@ void PpgChannelDetector::reset(){
 }
 
 void PpgChannelDetector::finishCalibration(){
-  float sorted[PpgChannelConfig::CALIBRATION_SAMPLES];
+  float sorted[PpgChannelConfig::PROMINENCE_CAPACITY];
   memcpy(sorted,calibration_,sizeof(sorted));
   noise_=max(0.5f,percentile(sorted,calibrationCount_,25));
   memcpy(sorted,calibration_,sizeof(sorted));
@@ -59,7 +61,7 @@ PpgChannelObservation PpgChannelDetector::update(uint32_t raw,uint64_t timestamp
     initialized_=true;
     dc_=(float)raw;
     previousTimestampUs_=timestampUs;
-    calibration_[calibrationCount_++]=0;
+    calibrationSamples_=1;
     return observation;
   }
 
@@ -67,12 +69,23 @@ PpgChannelObservation PpgChannelDetector::update(uint32_t raw,uint64_t timestamp
   const float ac=(float)raw-dc_;
   filtered_+=PpgChannelConfig::FILTER_ALPHA*(ac-filtered_);
 
+  if(filtered_<valley_)valley_=filtered_;
+  const bool localMaximum=previous1_>previous2_ && previous1_>=filtered_;
+  const float localProminence=localMaximum?max(0.0f,previous1_-valley_):0.0f;
+
   if(!calibrated_){
-    calibration_[calibrationCount_++]=fabsf(filtered_);
+    ++calibrationSamples_;
+    if(localMaximum&&localProminence>0){
+      calibration_[calibrationPosition_]=localProminence;
+      calibrationPosition_=(calibrationPosition_+1)%PpgChannelConfig::PROMINENCE_CAPACITY;
+      if(calibrationCount_<PpgChannelConfig::PROMINENCE_CAPACITY)++calibrationCount_;
+      valley_=filtered_;
+    }
+    if(calibrationSamples_>=PpgChannelConfig::CALIBRATION_SAMPLES&&
+       calibrationCount_>=4)finishCalibration();
     previous2_=previous1_;
     previous1_=filtered_;
     previousTimestampUs_=timestampUs;
-    if(calibrationCount_>=PpgChannelConfig::CALIBRATION_SAMPLES)finishCalibration();
     observation.filtered=filtered_;
     observation.threshold=threshold();
     observation.snr=signalToNoise();
@@ -80,11 +93,9 @@ PpgChannelObservation PpgChannelDetector::update(uint32_t raw,uint64_t timestamp
     return observation;
   }
 
-  if(filtered_<valley_)valley_=filtered_;
-  const bool localMaximum=previous1_>previous2_ && previous1_>=filtered_;
   if(localMaximum){
     observation.timestampUs=previousTimestampUs_;
-    observation.prominence=max(0.0f,previous1_-valley_);
+    observation.prominence=localProminence;
     const float fusedMedian=medianFusedProminence();
     observation.artifact=fusedCount_>=4 && fusedMedian>0 &&
       observation.prominence>6.0f*fusedMedian;

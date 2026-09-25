@@ -39,8 +39,10 @@ class PpgChannelDetector {
 
   bool initialized_;
   bool calibrated_;
+  uint16_t calibrationSamples_;
   uint8_t calibrationCount_;
-  float calibration_[PpgChannelConfig::CALIBRATION_SAMPLES];
+  uint8_t calibrationPosition_;
+  float calibration_[PpgChannelConfig::PROMINENCE_CAPACITY];
   float dc_;
   float filtered_;
   float previous1_;
