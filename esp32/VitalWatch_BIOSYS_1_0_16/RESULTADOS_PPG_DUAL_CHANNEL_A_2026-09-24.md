@@ -182,3 +182,54 @@ investigación. No se cargó ni se liberó la imagen normal. La siguiente
 corrección debe modificar una sola hipótesis de selección temporal y volver a
 ejecutar controles negativos, replays y una nueva toma física antes de decidir
 la liberación.
+
+## Segunda toma física del 25-09-2026
+
+Se repitió la captura durante 90 segundos después de reubicar el dedo y esperar
+15 segundos de estabilización. Se mantuvieron la misma placa, imagen RESEARCH,
+configuración y puerto serie de la primera toma.
+
+### Artefactos inmutables
+
+| Artefacto | SHA-256 |
+|---|---|
+| `20260925-113734-dedo-quieto-dual-channel-a-toma-2.csv` | `9A75A8C7929384DE0A7282767251F7339646B6173A365104AFE665100AC8B685` |
+| `20260925-113734-dedo-quieto-dual-channel-a-toma-2.json` | `B1C47CAF77626DEC6DB6E43F7EAEDC46546BC7DD0BCF25DE3670ECC930971990` |
+
+Los archivos de captura no se modificaron después de calcular estos hashes. La
+evaluación estructurada separada está en
+`20260925-113734-dedo-quieto-dual-channel-a-toma-2-acceptance.json`.
+
+### Puerta de aceptación
+
+| Criterio | Resultado | Estado |
+|---|---:|---|
+| Registros | 2.250 | PASS |
+| Filas descartadas | 0 | PASS |
+| Deltas consecutivos | 2.249 de 2.249 a 40.000 us | PASS |
+| `suspected_drops` / muestras faltantes | 0 / 0 | PASS |
+| Mayor tramo `VALID` | 4.160 ms | **FAIL** |
+| `VALID` con movimiento, transición óptica o tiempo inválido | 0 | PASS |
+| `VALID` con menos de seis coincidencias rojo/IR | 0 | PASS |
+
+La nueva posición mejoró el resultado: hubo 104 muestras `VALID` consecutivas,
+equivalentes a 4,16 segundos. Durante ese tramo la FC técnica estuvo entre
+69,77 y 71,43 lpm, con mediana de 71,43 lpm. Esto no constituye validación
+clínica porque no hubo un instrumento de referencia simultáneo.
+
+En el conjunto completo se registraron 90 candidatos rojos, 96 infrarrojos, 80
+pulsos fusionados y 69 IBI. Los IBI todavía abarcaron de 340 a 1.600 ms y
+`QR_IBI_INCONSISTENT` apareció en 838 filas. Hubo un transitorio óptico con su
+cuarentena y recalibración; no hubo movimiento alto, fallas temporales, muestras
+faltantes ni pérdidas sospechadas.
+
+Hipótesis rechazada: **reubicar el dedo y estabilizarlo durante 15 segundos basta
+para sostener una lectura técnicamente válida durante al menos 10 segundos con
+la configuración `PPG-DUAL-CHANNEL-A` actual**.
+
+### Decisión de la segunda toma
+
+**REJECTED — KEEP RESEARCH.** La señal mejoró, pero no alcanzó el tramo continuo
+obligatorio de 10 segundos. No se cargó la imagen normal. La próxima iteración
+debe aislar una sola modificación del selector temporal de pulsos, repetir los
+replays y controles negativos, y volver a comprobarla físicamente.

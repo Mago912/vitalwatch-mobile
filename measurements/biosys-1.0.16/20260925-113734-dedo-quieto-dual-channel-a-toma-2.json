@@ -1,0 +1,14 @@
+{
+    "firmware":  "BIOSYS 1.0.16",
+    "mode":  "BIO_RESEARCH_MODE=1",
+    "label":  "dedo-quieto-dual-channel-a-toma-2",
+    "port":  "COM3",
+    "baudRate":  460800,
+    "requestedDurationSeconds":  90,
+    "startedAt":  "2026-09-25T11:37:34.4782226-03:00",
+    "finishedAt":  "2026-09-25T11:39:06.9076440-03:00",
+    "researchRecords":  2250,
+    "discardedRecords":  0,
+    "csvFile":  "20260925-113734-dedo-quieto-dual-channel-a-toma-2.csv",
+    "note":  "Datos experimentales. No usar para diagnostico medico."
+}
