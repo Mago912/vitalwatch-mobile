@@ -59,6 +59,10 @@ placa.
 Captura estable toma 1: 2.250 registros, 0 descartados, LED fijo en `0x18`,
 pero sólo 1.880 ms continuos `VALID`. Resultado: **FAIL, repetir contacto**.
 
+Intento 2: 2.250 registros, 0 descartados y 2.250 muestras `SIN DEDO` con los
+canales cerca de 500. Resultado: **configuración de contacto inválida**; el
+firmware no fabricó una frecuencia y la prueba estable debe repetirse.
+
 El replay se escribió en `0x10000` al 100 % y `esptool` verificó su hash.
 `measurements/biosys-1.0.18/replay-results.json` conserva los resultados.
 

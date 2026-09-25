@@ -1,0 +1,58 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.18",
+  "mode": "BIO_RESEARCH_MODE=1",
+  "configuredExperimentId": "PPG-AUTOGAIN-18-A",
+  "capture": {
+    "csvFile": "20260925-175511-autogain-18-contacto-estable-toma-2.csv",
+    "csvSha256": "CC53DAEFAD141B16B0B2598A1D56E8A8E493A5E1ABEC93C2F39DE7B8F9B7C204",
+    "metadataFile": "20260925-175511-autogain-18-contacto-estable-toma-2.json",
+    "metadataSha256": "1336D0B757436182F8A886FE515F693C1FB0740FBE81B2C8DB2916FF2BC6D584",
+    "requestedDurationSeconds": 90,
+    "sessionId": 1,
+    "records": 2250,
+    "discardedRecords": 0
+  },
+  "autogain": {
+    "initialLedAmplitude": 24,
+    "minimumLedAmplitude": 24,
+    "maximumLedAmplitude": 24,
+    "ledChanges": 0
+  },
+  "timing": {
+    "consecutivePairs": 2249,
+    "badDeltaCount": 0,
+    "minimumDeltaUs": 40000,
+    "maximumDeltaUs": 40000,
+    "suspectedDrops": 0,
+    "missingSamples": 0
+  },
+  "signal": {
+    "redMinimum": 469,
+    "redAverage": 492.42,
+    "redMaximum": 515,
+    "irMinimum": 479,
+    "irAverage": 507.12,
+    "irMaximum": 528,
+    "redCandidates": 0,
+    "irCandidates": 0,
+    "fusedBeats": 0,
+    "minimumAccelerationMagnitudeG": 0.942,
+    "maximumAccelerationMagnitudeG": 0.9651,
+    "maximumGyroscopeMagnitudeRadS": 0.00899
+  },
+  "technicalValidity": {
+    "noContactSamples": 2250,
+    "validSamples": 0,
+    "longestValidMs": 0,
+    "fabricatedHeartRateSamples": 0
+  },
+  "acceptance": {
+    "passed": false,
+    "verdict": "INVALID_STABLE_CONTACT_SETUP_NO_CONTACT_CONTROL_CONFIRMED",
+    "failedCriterion": "No optical contact was present during the captured interval.",
+    "passedSubcriterion": "The firmware rejected all no-contact samples and published no heart rate.",
+    "nextStep": "Remove the finger for at least five seconds, place it centered on MAX30102, then repeat the stable-contact capture."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}

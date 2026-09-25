@@ -79,3 +79,14 @@ o movimiento limitaron el tramo `VALID` máximo a 1.880 ms. No hubo ningún
 
 La estabilidad de ganancia queda confirmada para este contacto. La puerta de
 validez no fue superada y debe repetirse la toma sin cambiar umbrales.
+
+## Captura física estable, intento 2
+
+El intento conservó 2.250 registros con tiempo exacto y cero descartados, pero
+los canales rojo e infrarrojo permanecieron cerca de 500 durante toda la toma.
+Las 2.250 muestras fueron rechazadas como `SIN DEDO`, sin pulsos candidatos ni
+frecuencia cardíaca publicada. Por lo tanto, esta captura confirma el rechazo
+seguro de ausencia de contacto, pero no cuenta como prueba de contacto estable.
+
+La repetición debe comenzar después de retirar el dedo durante al menos cinco
+segundos y volver a colocarlo centrado sobre el MAX30102.
