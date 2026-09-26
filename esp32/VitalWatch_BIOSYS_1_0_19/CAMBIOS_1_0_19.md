@@ -94,3 +94,14 @@ y 4 `SENAL BAJA`.
 Resultado: **FAIL de validez técnica; repetir posición sin cambiar umbrales**.
 El rechazo confirma que no se promovieron valores dudosos, pero todavía falta
 demostrar una frecuencia válida con el perfil normal.
+
+### Contacto normal, toma 2
+
+La repetición de 90 segundos volvió a confirmar contacto y cero pérdidas, pero
+no produjo estado `VALIDA`. La autoganancia quedó fija en `0x20`, con IR mediano
+108.856 y modulación IR mediana 0,107 %. La referencia estable de 1.0.18 había
+obtenido 0,241 % con LED `0x18`.
+
+Resultado: **FAIL de validez técnica**. La menor pulsación relativa pese a una
+señal DC mayor apunta primero a presión o apoyo del dedo. Se repetirá con la
+yema apenas apoyada antes de proponer cambios al firmware.

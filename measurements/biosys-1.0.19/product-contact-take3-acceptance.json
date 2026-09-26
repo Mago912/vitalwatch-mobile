@@ -1,0 +1,56 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.19",
+  "profile": "PRODUCT",
+  "source": {
+    "logFile": "product-contact-take3.log",
+    "logSha256": "6EF30106EE8D773C08D6896482B920CD69329179EBDF377E130920EAA24E5259",
+    "requestedDurationSeconds": 90,
+    "diagnostics": 90,
+    "serialPrefixedBacklogLines": 1,
+    "cleanDiagnosticsForRangeAnalysis": 89
+  },
+  "contact": {
+    "confirmedDiagnostics": 90,
+    "missingDiagnostics": 0,
+    "redMinimumClean": 95885,
+    "redMedianClean": 96701,
+    "redMaximumClean": 98410,
+    "irMinimumClean": 107360,
+    "irMedianClean": 108856,
+    "irMaximumClean": 109480,
+    "ledMinimum": 32,
+    "ledMaximum": 32,
+    "maximumSuspectedDrops": 0,
+    "irModulationMedianPercentClean": 0.107,
+    "redModulationMedianPercentClean": 0.059
+  },
+  "stableReference": {
+    "source": "measurements/biosys-1.0.18/20260925-180028-autogain-18-contacto-estable-toma-3.csv",
+    "ledAmplitude": 24,
+    "irMedian": 81911,
+    "irModulationMedianPercent": 0.24074,
+    "redModulationMedianPercent": 0.11883,
+    "validSamples": 1195,
+    "longestValidMs": 27240
+  },
+  "heartRateStatusCounts": {
+    "valid": 0,
+    "unstable": 31,
+    "insufficientData": 55,
+    "lowQuality": 4
+  },
+  "acceptance": {
+    "passed": false,
+    "verdict": "CONTACT_CONFIRMED_BUT_PULSATILITY_BELOW_STABLE_REFERENCE",
+    "passedSubcriteria": [
+      "contact was confirmed for every diagnostic",
+      "LED amplitude remained stable after measurement started",
+      "suspected sample drops remained zero",
+      "no invalid value was promoted to VALID"
+    ],
+    "failedCriterion": "At least one technically VALID heart-rate interval was required.",
+    "nextStep": "Repeat with the fingertip resting lightly from first contact, without increasing pressure, before changing any threshold."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}

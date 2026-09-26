@@ -96,6 +96,11 @@ Contacto normal toma 1: 60/60 diagnósticos con contacto, LED fijo en `0x18` y
 cero pérdidas, pero ningún estado `VALIDA`. Resultado: **FAIL, repetir contacto
 sin relajar las barreras**.
 
+Contacto normal toma 2: 90/90 diagnósticos con contacto y cero pérdidas, LED
+fijo en `0x20`, pero ningún estado `VALIDA`. La modulación IR mediana fue 0,107
+%, por debajo del 0,241 % de la referencia estable. Resultado: **FAIL, repetir
+con menor presión antes de modificar el firmware**.
+
 ## Exclusiones
 
 No se distribuyen `vitalwatch_config.h`, credenciales, `build/`, `.bin`, `.elf`
