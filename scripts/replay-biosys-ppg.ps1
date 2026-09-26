@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Port,
   [string]$InputCsv,
-  [ValidateSet('', 'CHANNEL_WEAK', 'CHANNEL_OUTLIER', 'FUSION_PAIRED', 'FUSION_RED_ONLY', 'FUSION_IR_ONLY', 'FUSION_TOO_FAR', 'FUSION_LONG_GAP', 'FUSION_ROLLOVER', 'OPTICAL_7_PERCENT', 'OPTICAL_9_PERCENT', 'MOTION_ONE_MODERATE', 'MOTION_THREE_MODERATE', 'MOTION_SEVERE', 'MOTION_SATURATED', 'RECOVERY_RESTART', 'VALID_STABLE_SYNTHETIC', 'INVALID_TIMING_FALSE', 'INVALID_SEQUENCE_GAP', 'INVALID_TIME_REVERSE', 'INVALID_CHANNEL_RATIO', 'INVALID_SNR', 'VALID_SNR_BOUNDARY', 'RESET_AFTER_VALID')]
+  [ValidateSet('', 'CHANNEL_WEAK', 'CHANNEL_OUTLIER', 'FUSION_PAIRED', 'FUSION_RED_ONLY', 'FUSION_IR_ONLY', 'FUSION_TOO_FAR', 'FUSION_LONG_GAP', 'FUSION_ROLLOVER', 'OPTICAL_7_PERCENT', 'OPTICAL_9_PERCENT', 'MOTION_ONE_MODERATE', 'MOTION_THREE_MODERATE', 'MOTION_SEVERE', 'MOTION_SATURATED', 'RECOVERY_RESTART', 'VALID_STABLE_SYNTHETIC', 'INVALID_TIMING_FALSE', 'INVALID_SEQUENCE_GAP', 'INVALID_TIME_REVERSE', 'INVALID_CHANNEL_RATIO', 'INVALID_SNR', 'VALID_SNR_BOUNDARY', 'INVALID_BPM_JUMP', 'RESET_AFTER_VALID')]
   [string]$SelfTest = '',
   [bool]$ExpectValid = $true,
   [switch]$AllowEitherValidity,
@@ -21,7 +21,7 @@ if ([string]::IsNullOrWhiteSpace($InputCsv) -and
 $resolvedInput = $null
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
   $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-  $OutputPath = Join-Path $projectRoot "measurements\biosys-1.0.19\$stamp-replay.log"
+  $OutputPath = Join-Path $projectRoot "measurements\biosys-1.0.20\$stamp-replay.log"
 } elseif (-not [System.IO.Path]::IsPathRooted($OutputPath)) {
   $OutputPath = Join-Path $projectRoot $OutputPath
 }

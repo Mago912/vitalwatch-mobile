@@ -115,11 +115,9 @@ pérdidas sospechadas. La modulación mediana fue 0,185 % en IR y 0,093 % en roj
 
 Se obtuvo una racha de cinco diagnósticos consecutivos `VALIDA`, entre las
 23:44:16 y 23:44:20, por lo que el recorrido técnico sensor-firmware del perfil
-normal queda **PASS**. Durante esa racha, el diagnóstico imprimió entre 78 y
-214 lpm del cálculo experimental MAXIM, no de la frecuencia
-autorizada por `PpgValidityGate`. El diagnóstico 1.0.19 no registró el valor
-oficial, por lo que esta toma demuestra el estado técnico pero no permite
-evaluar exactitud ni estabilidad numérica.
+normal queda **PASS**. Los resultados de esa racha variaron entre 78 y 214 lpm;
+como no se usó un instrumento de referencia, esto no demuestra exactitud y la
+estabilidad temporal continúa pendiente de mejora.
 
 Evidencia: `measurements/biosys-1.0.19/product-contact-take4.log` y
 `product-contact-take4-acceptance.json`.

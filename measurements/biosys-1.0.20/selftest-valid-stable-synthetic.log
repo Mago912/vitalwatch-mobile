@@ -1,0 +1,4 @@
+[REPLAY] RESET_OK
+[INFO][PPG] sesion=1 contacto confirmado; estabilizando
+[INFO][PPG] Estabilizacion completa; midiendo
+[SELFTEST] VALID_STABLE_SYNTHETIC PASS status=0 bpm=80.00 reasons=0x0000 longest_valid_ms=7610

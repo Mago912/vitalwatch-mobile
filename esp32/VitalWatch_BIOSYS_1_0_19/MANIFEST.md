@@ -107,9 +107,10 @@ estados `VALIDA` consecutivos. El LED se ajustó durante la estabilización y
 quedó fijo en `0x18`. Resultado: **PASS del recorrido técnico del perfil
 normal**.
 
-Los cinco resultados `VALIDA` variaron entre 78 y 214 lpm. Sin un instrumento
-de referencia, esta prueba no valida exactitud clínica; la estabilidad temporal
-queda como próximo objetivo biomédico. Evidencia completa en
+Durante los cinco estados `VALIDA`, el diagnóstico mostró 78 a 214 lpm del
+cálculo experimental MAXIM; no mostró la frecuencia autorizada por
+`PpgValidityGate`. Por eso esta prueba no permite evaluar exactitud ni
+estabilidad numérica. Evidencia completa en
 `measurements/biosys-1.0.19/product-contact-take4-acceptance.json`.
 
 ## Exclusiones

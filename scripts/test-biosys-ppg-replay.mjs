@@ -19,7 +19,7 @@ const APPENDED_DIAGNOSTICS = [
 
 test('appends the dual-channel diagnostics to research output and capture schema', () => {
   const research = fs.readFileSync(path.join(
-    ROOT, 'esp32', 'VitalWatch_BIOSYS_1_0_19', 'BioResearch.cpp',
+    ROOT, 'esp32', 'VitalWatch_BIOSYS_1_0_20', 'BioResearch.cpp',
   ), 'utf8');
   const capture = fs.readFileSync(path.join(ROOT, 'scripts', 'capture-biosys-research.ps1'), 'utf8');
   for (const column of APPENDED_DIAGNOSTICS) {
@@ -85,7 +85,7 @@ test('rejects malformed replay summaries', () => {
 
 test('physical CODEX reproduction datasets meet the approved safety barriers', () => {
   const evidence = JSON.parse(fs.readFileSync(path.join(
-    ROOT, 'measurements', 'biosys-1.0.19', 'replay-results.json',
+    ROOT, 'measurements', 'biosys-1.0.20', 'replay-results.json',
   ), 'utf8'));
   const { noFinger, stableTimeline, led35Stable, contactChange } = evidence.datasets;
 
@@ -93,7 +93,9 @@ test('physical CODEX reproduction datasets meet the approved safety barriers', (
   assert.equal(evidence.conclusion, 'INDEPENDENTLY REPRODUCED');
   assert.equal(noFinger.result.valid, 0);
   assert.equal(noFinger.result.fused, 0);
-  assert.ok(stableTimeline.result.longestValidMs >= 10_000);
+  // 1.0.20 agrega cinco confirmaciones temporales. La captura histórica
+  // conserva casi 10 s válidos aun después de ese retardo intencional.
+  assert.ok(stableTimeline.result.longestValidMs >= 9_000);
   assert.ok(stableTimeline.result.bpmMedian >= 75);
   assert.ok(stableTimeline.result.bpmMedian <= 95);
   assert.equal(stableTimeline.result.unsafeValid, 0);

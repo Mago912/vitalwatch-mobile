@@ -1,0 +1,5 @@
+[REPLAY] RESET_OK
+[INFO][PPG] sesion=6 contacto confirmado; estabilizando
+[INFO][PPG] Estabilizacion completa; midiendo
+[REPLAY_DIAG] status_valid=247 insufficient=416 unstable=1486 low_quality=100 no_contact=2 timing_invalid=0 sensor_error=0 reasons_or=0x0F11 max_ibi=8 max_sync=7 max_sync_window=8 max_red_snr=25.255 max_ir_snr=32.132 fusion_bpm_min=0.00 fusion_bpm_max=115.38 max_mad_ratio=0.618 max_ibi_range_ms=1000
+[REPLAY_RESULT] rows=2251 rejected=0 fused=93 valid=247 first_valid_us=137028703 longest_valid_ms=9840 bpm_min=83.33 bpm_max=85.71 bpm_median=86.00 quarantine_count=1 recalibration_count=1 unsafe_valid=0 single_channel_valid=0 valid_during_quarantine=0

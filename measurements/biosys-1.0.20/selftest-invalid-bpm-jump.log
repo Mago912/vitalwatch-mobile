@@ -1,0 +1,2 @@
+[REPLAY] RESET_OK
+[SELFTEST] INVALID_BPM_JUMP PASS status=2 bpm=nan reasons=0x0800 longest_valid_ms=0

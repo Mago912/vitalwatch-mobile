@@ -1,0 +1,3 @@
+[REPLAY] RESET_OK
+[REPLAY_DIAG] status_valid=0 insufficient=0 unstable=0 low_quality=0 no_contact=500 timing_invalid=0 sensor_error=0 reasons_or=0x0001 max_ibi=0 max_sync=0 max_sync_window=0 max_red_snr=0.000 max_ir_snr=0.000 fusion_bpm_min=0.00 fusion_bpm_max=0.00 max_mad_ratio=0.000 max_ibi_range_ms=0
+[REPLAY_RESULT] rows=500 rejected=0 fused=0 valid=0 first_valid_us=0 longest_valid_ms=0 bpm_min=nan bpm_max=nan bpm_median=nan quarantine_count=0 recalibration_count=0 unsafe_valid=0 single_channel_valid=0 valid_during_quarantine=0
