@@ -83,3 +83,14 @@ en `0x18`, 932 muestras procesadas y cero pérdidas sospechadas. El MPU6500 en
 variante todavía no validada.
 
 Pendiente: prueba de contacto real ejecutando el perfil normal.
+
+### Contacto normal, toma 1
+
+Una consulta de 60 segundos obtuvo 60/60 diagnósticos con contacto, LED fijo en
+`0x18`, rojo mediano 70.584, IR mediano 80.430 y cero pérdidas sospechadas.
+No produjo estado `VALIDA`: 32 diagnósticos fueron `INESTABLE`, 24 `SIN DATOS`
+y 4 `SENAL BAJA`.
+
+Resultado: **FAIL de validez técnica; repetir posición sin cambiar umbrales**.
+El rechazo confirma que no se promovieron valores dudosos, pero todavía falta
+demostrar una frecuencia válida con el perfil normal.

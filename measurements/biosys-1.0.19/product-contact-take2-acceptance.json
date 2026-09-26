@@ -1,0 +1,58 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.19",
+  "profile": "PRODUCT",
+  "source": {
+    "logFile": "product-contact-take2.log",
+    "logSha256": "8CE3259605E6C022663B5FCA3AB95AA8332CE6FC1B1D8A3B42A4ED048C74560E",
+    "requestedDurationSeconds": 60,
+    "diagnostics": 60,
+    "serialPrefixedBacklogLines": 1
+  },
+  "contact": {
+    "confirmedDiagnostics": 60,
+    "missingDiagnostics": 0,
+    "redMinimum": 69454,
+    "redMedian": 70584,
+    "redMaximum": 70810,
+    "irMinimum": 79761,
+    "irMedian": 80430,
+    "irMaximum": 81350,
+    "ledMinimum": 24,
+    "ledMaximum": 24,
+    "maximumSuspectedDrops": 0
+  },
+  "heartRateStatusCounts": {
+    "valid": 0,
+    "unstable": 32,
+    "insufficientData": 24,
+    "lowQuality": 4
+  },
+  "sessionStateCounts": {
+    "measuring": 4,
+    "resultReady": 39,
+    "lowQuality": 2,
+    "timeout": 15
+  },
+  "qualityReasonCounts": {
+    "none": 38,
+    "ibiInconsistent": 11,
+    "opticalTransient": 4,
+    "detectorCalibrating": 3,
+    "ibiInconsistentAndChannelMismatch": 4
+  },
+  "acceptance": {
+    "passed": false,
+    "verdict": "CONTACT_CONFIRMED_BUT_NO_TECHNICALLY_VALID_HEART_RATE",
+    "passedSubcriteria": [
+      "MAX30102 remained ready",
+      "contact was confirmed for every diagnostic",
+      "LED amplitude remained stable at 0x18",
+      "suspected sample drops remained zero",
+      "no invalid value was promoted to VALID"
+    ],
+    "failedCriterion": "At least one technically VALID heart-rate interval was required.",
+    "nextStep": "Remove and reposition the fingertip, then repeat without changing detector or validity thresholds."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}

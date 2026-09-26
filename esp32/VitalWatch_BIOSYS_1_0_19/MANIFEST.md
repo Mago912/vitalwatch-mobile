@@ -92,6 +92,10 @@ BIOSYS 1.0.19 / SYS 0.9.9 / BIO 0.7.3, WiFi, telemetría y sincronización. El
 MAX30102 respondió con `PART_ID=0x15`, LED inicial `0x18` y cero pérdidas en el
 diagnóstico consultado. La prueba con dedo en este perfil sigue pendiente.
 
+Contacto normal toma 1: 60/60 diagnósticos con contacto, LED fijo en `0x18` y
+cero pérdidas, pero ningún estado `VALIDA`. Resultado: **FAIL, repetir contacto
+sin relajar las barreras**.
+
 ## Exclusiones
 
 No se distribuyen `vitalwatch_config.h`, credenciales, `build/`, `.bin`, `.elf`
