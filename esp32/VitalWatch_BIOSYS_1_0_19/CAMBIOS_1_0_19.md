@@ -70,3 +70,16 @@ El resultado completo está en
 `measurements/biosys-1.0.19/replay-results.json`. Esta prueba valida la ejecución
 del pipeline en la placa, pero todavía no equivale a instalar ni probar el
 perfil normal de 1.0.19.
+
+## Instalación del perfil normal
+
+El binario normal se escribió al 100 % por `COM3` y `esptool` verificó su hash.
+El arranque físico confirmó BIOSYS 1.0.19, SYS 0.9.9, BIO 0.7.3, WiFi,
+telemetría, dos contactos y dos medicamentos sincronizados.
+
+El diagnóstico PPG confirmó MAX30102 `PART_ID=0x15`, servicio listo, LED inicial
+en `0x18`, 932 muestras procesadas y cero pérdidas sospechadas. El MPU6500 en
+`0x68` se recuperó después de un timeout inicial y continúa identificado como
+variante todavía no validada.
+
+Pendiente: prueba de contacto real ejecutando el perfil normal.

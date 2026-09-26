@@ -85,6 +85,13 @@ Resultado: **23/23 autotests y 4/4 datasets PASS**, con cero resultados
 inseguros, cero validaciones de canal único y cero valores válidos durante
 cuarentena. La evidencia está en `measurements/biosys-1.0.19`.
 
+## Perfil normal instalado
+
+El producto se escribió al 100 % y verificó su hash. El arranque confirmó
+BIOSYS 1.0.19 / SYS 0.9.9 / BIO 0.7.3, WiFi, telemetría y sincronización. El
+MAX30102 respondió con `PART_ID=0x15`, LED inicial `0x18` y cero pérdidas en el
+diagnóstico consultado. La prueba con dedo en este perfil sigue pendiente.
+
 ## Exclusiones
 
 No se distribuyen `vitalwatch_config.h`, credenciales, `build/`, `.bin`, `.elf`

@@ -1,0 +1,45 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.19",
+  "profile": "PRODUCT",
+  "loadedBinary": {
+    "sizeBytes": 1183920,
+    "sha256": "28C3DAD38EE36DEEE3102105344F9E5D8135A20AB050300291074B01D1A3E04C",
+    "writeAddress": "0x10000",
+    "writeVerified": true,
+    "successfulWriteBaud": 57600,
+    "port": "COM3"
+  },
+  "startup": {
+    "biosys": "1.0.19",
+    "sys": "0.9.9",
+    "bio": "0.7.3",
+    "role": "CONNECTED_BIOMEDICAL_SYSTEM",
+    "wifiConnected": true,
+    "telemetrySent": true,
+    "contactsSynchronized": 2,
+    "medicationsSynchronized": 2
+  },
+  "ppg": {
+    "ready": true,
+    "partId": "0x15",
+    "initialLedAmplitude": 24,
+    "samplesObserved": 932,
+    "suspectedDrops": 0,
+    "waitingForContact": true
+  },
+  "imu": {
+    "initialProbeTimeout": true,
+    "recovered": true,
+    "address": "0x68",
+    "model": "MPU6500",
+    "whoAmI": "0x70",
+    "validationStatus": "UNVALIDATED_VARIANT"
+  },
+  "acceptance": {
+    "installedAndStarted": true,
+    "stableContactCheckPending": true,
+    "note": "Product identity, connectivity and MAX30102 initialization were physically observed. A product-profile contact measurement is still required."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}
