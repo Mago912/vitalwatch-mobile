@@ -101,6 +101,17 @@ fijo en `0x20`, pero ningún estado `VALIDA`. La modulación IR mediana fue 0,10
 %, por debajo del 0,241 % de la referencia estable. Resultado: **FAIL, repetir
 con menor presión antes de modificar el firmware**.
 
+Contacto normal toma 3: después de una referencia sin dedo, la yema se apoyó
+sin presión. Hubo 58 diagnósticos limpios con contacto, cero pérdidas y cinco
+estados `VALIDA` consecutivos. El LED se ajustó durante la estabilización y
+quedó fijo en `0x18`. Resultado: **PASS del recorrido técnico del perfil
+normal**.
+
+Los cinco resultados `VALIDA` variaron entre 78 y 214 lpm. Sin un instrumento
+de referencia, esta prueba no valida exactitud clínica; la estabilidad temporal
+queda como próximo objetivo biomédico. Evidencia completa en
+`measurements/biosys-1.0.19/product-contact-take4-acceptance.json`.
+
 ## Exclusiones
 
 No se distribuyen `vitalwatch_config.h`, credenciales, `build/`, `.bin`, `.elf`

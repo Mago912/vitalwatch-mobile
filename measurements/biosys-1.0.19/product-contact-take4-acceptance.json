@@ -1,0 +1,66 @@
+{
+  "evidenceType": "CODEX REPRODUCTION TESTS",
+  "firmwareCandidate": "BIOSYS 1.0.19",
+  "profile": "PRODUCT",
+  "source": {
+    "logFile": "product-contact-take4.log",
+    "logSha256": "AC152886E60A972313F6C7CA448E5B7C46C30AF88FBEA46F7A2957068A129BB7",
+    "requestedDurationSeconds": 105,
+    "diagnostics": 105,
+    "serialPrefixedBacklogLines": 1,
+    "cleanDiagnosticsForRangeAnalysis": 104
+  },
+  "procedure": {
+    "baselineWithoutFingerSeconds": 5,
+    "instruction": "Rest the full fingertip centered on the sensor without pressing, then keep the finger, board and cable still.",
+    "firstCleanContactTimestamp": "2026-09-25T23:43:31.8198058-03:00",
+    "lastCleanContactTimestamp": "2026-09-25T23:44:28.9154648-03:00"
+  },
+  "contact": {
+    "confirmedDiagnosticsClean": 58,
+    "missingDiagnosticsClean": 46,
+    "redMinimum": 71194,
+    "redMedian": 71590,
+    "redMaximum": 94754,
+    "irMinimum": 76810,
+    "irMedian": 77721,
+    "irMaximum": 102341,
+    "ledValues": [24, 32],
+    "ledSettledValue": 24,
+    "maximumSuspectedDrops": 0,
+    "irModulationMedianPercent": 0.185,
+    "redModulationMedianPercent": 0.093
+  },
+  "heartRateStatusCounts": {
+    "valid": 5,
+    "unstable": 26,
+    "insufficientData": 27,
+    "noFinger": 46
+  },
+  "validRun": {
+    "consecutiveDiagnostics": 5,
+    "start": "2026-09-25T23:44:16.8807825-03:00",
+    "end": "2026-09-25T23:44:20.8957829-03:00",
+    "durationSecondsBetweenFirstAndLast": 4.015,
+    "bpmMinimum": 78,
+    "bpmMedian": 115,
+    "bpmMaximum": 214
+  },
+  "acceptance": {
+    "passed": true,
+    "verdict": "PRODUCT_PROFILE_REACHED_CONSECUTIVE_TECHNICALLY_VALID_OUTPUT_WITHOUT_SAMPLE_DROPS",
+    "passedCriteria": [
+      "The normal product profile recognized real contact after a no-finger baseline.",
+      "Five consecutive diagnostics reached the internal VALID state.",
+      "Suspected sample drops remained zero.",
+      "LED amplitude settled at 0x18 after the contact transition."
+    ],
+    "limitations": [
+      "The valid BPM outputs ranged from 78 to 214 and were not compared with a reference device.",
+      "Most contact diagnostics remained INESTABLE or SIN DATOS.",
+      "This evidence accepts the technical sensor-to-firmware path, not measurement accuracy."
+    ],
+    "nextStep": "Improve temporal stability and reject implausible rapid BPM variation without relaxing signal-quality gates."
+  },
+  "clinicalValidation": "NOT_PERFORMED"
+}

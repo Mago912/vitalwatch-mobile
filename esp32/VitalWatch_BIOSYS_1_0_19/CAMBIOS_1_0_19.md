@@ -105,3 +105,19 @@ obtenido 0,241 % con LED `0x18`.
 Resultado: **FAIL de validez técnica**. La menor pulsación relativa pese a una
 señal DC mayor apunta primero a presión o apoyo del dedo. Se repetirá con la
 yema apenas apoyada antes de proponer cambios al firmware.
+
+### Contacto normal, toma 3
+
+La prueba comenzó con una referencia sin dedo y luego se apoyó la yema completa
+sin presión. En 58 diagnósticos limpios con contacto, la autoganancia pasó de
+`0x20` a `0x18` durante la estabilización y permaneció en `0x18`. No hubo
+pérdidas sospechadas. La modulación mediana fue 0,185 % en IR y 0,093 % en rojo.
+
+Se obtuvo una racha de cinco diagnósticos consecutivos `VALIDA`, entre las
+23:44:16 y 23:44:20, por lo que el recorrido técnico sensor-firmware del perfil
+normal queda **PASS**. Los resultados de esa racha variaron entre 78 y 214 lpm;
+como no se usó un instrumento de referencia, esto no demuestra exactitud y la
+estabilidad temporal continúa pendiente de mejora.
+
+Evidencia: `measurements/biosys-1.0.19/product-contact-take4.log` y
+`product-contact-take4-acceptance.json`.
