@@ -5,6 +5,14 @@ import type { DeviceAlertState, ReadingStatus, VitalTrend, WatchStatus } from '.
 export const REMOTE_READING_MAX_AGE_MS = 20_000;
 export const REMOTE_COMMUNICATION_MAX_AGE_MS = 75_000;
 
+export function isRecentValidMeasurement(recordedAt: string | null, nowMs = Date.now()) {
+  if (!recordedAt) return false;
+  const recordedAtMs = new Date(recordedAt).getTime();
+  if (!Number.isFinite(recordedAtMs)) return false;
+  const ageMs = Math.max(0, nowMs - recordedAtMs);
+  return ageMs <= REMOTE_COMMUNICATION_MAX_AGE_MS;
+}
+
 type RemoteReading = {
   heartRate: number | null;
   oxygen: number | null;

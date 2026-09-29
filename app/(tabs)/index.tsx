@@ -1,5 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { VitalWatchLogo } from '@/components/vitalwatch-logo';
 import { appColors, statusStyles } from '@/constants/vitalwatch';
 import { useVitalWatch } from '@/providers/vitalwatch-provider';
 
@@ -54,7 +55,7 @@ export default function HomeScreen() {
       style={styles.screen}
       contentContainerStyle={styles.content}>
       <View>
-        <Text style={styles.appName}>VitalWatch</Text>
+        <VitalWatchLogo compact />
         <Text style={styles.title}>Panel principal</Text>
         <Text style={styles.subtitle}>
           Adulto mayor: {profile.elderName || 'Sin configurar'}
@@ -228,11 +229,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 120,
     gap: 18,
-  },
-  appName: {
-    color: appColors.primary,
-    fontSize: 16,
-    fontWeight: '800',
   },
   title: {
     color: appColors.text,

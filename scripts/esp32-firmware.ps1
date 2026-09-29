@@ -1,8 +1,10 @@
 param(
-  [ValidateSet('build', 'stable-build', 'stable-upload', 'baseline-build', 'bio-build', 'bio-upload', 'bio-research-build', 'bio-research-upload', 'bio-replay-build', 'bio-replay-upload', 'biosys-build', 'biosys-upload', 'biosys-research-build', 'biosys-research-upload', 'biosys-replay-build', 'biosys-replay-upload', 'ports', 'upload', 'monitor', 'tft-build', 'tft-upload')]
+  [ValidateSet('build', 'stable-build', 'stable-upload', 'baseline-build', 'bio-build', 'bio-upload', 'bio-research-build', 'bio-research-upload', 'bio-replay-build', 'bio-replay-upload', 'biosys-build', 'biosys-upload', 'biosys-research-build', 'biosys-research-upload', 'biosys-replay-build', 'biosys-replay-upload', 'biosys-compare-build', 'biosys-compare-upload', 'ports', 'upload', 'monitor', 'tft-build', 'tft-upload')]
   [string]$Action = 'build',
   [string]$Port,
-  [string]$Fqbn = 'esp32:esp32:esp32'
+  [string]$Fqbn = 'esp32:esp32:esp32',
+  [ValidateSet('1.0.21', '1.0.22', '1.0.23')]
+  [string]$BiosysVersion = '1.0.21'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,7 +16,8 @@ $sketchDirectory = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_1'
 $stableDirectory = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_9_0'
 $baselineDirectory = Join-Path $projectRoot 'esp32\VitalWatch_FW_0_5_0'
 $bioDirectory = Join-Path $projectRoot 'esp32\VitalWatch_BIO_0_6_0'
-$biosysDirectory = Join-Path $projectRoot 'esp32\VitalWatch_BIOSYS_1_0_20'
+$biosysSketchName = 'VitalWatch_BIOSYS_' + $BiosysVersion.Replace('.', '_')
+$biosysDirectory = Join-Path $projectRoot ('esp32\' + $biosysSketchName)
 $tftTestDirectory = Join-Path $projectRoot 'esp32\tft_test'
 $deviceConfig = Join-Path $sketchDirectory 'vitalwatch_config.h'
 $stableDeviceConfig = Join-Path $stableDirectory 'vitalwatch_config.h'
@@ -24,9 +27,10 @@ $baselineBuildDirectory = Join-Path $projectRoot '.arduino\build\fw-0.5.0'
 $bioBuildDirectory = Join-Path $projectRoot '.arduino\build\bio-0.6.0'
 $bioResearchBuildDirectory = Join-Path $projectRoot '.arduino\build\bio-0.6.0-research'
 $bioReplayBuildDirectory = Join-Path $projectRoot '.arduino\build\bio-0.6.0-replay'
-$biosysBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.20'
-$biosysResearchBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.20-research'
-$biosysReplayBuildDirectory = Join-Path $projectRoot '.arduino\build\biosys-1.0.20-replay'
+$biosysBuildDirectory = Join-Path $projectRoot ('.arduino\build\biosys-' + $BiosysVersion)
+$biosysResearchBuildDirectory = "$biosysBuildDirectory-research"
+$biosysReplayBuildDirectory = "$biosysBuildDirectory-replay"
+$biosysCompareBuildDirectory = "$biosysBuildDirectory-hrpair"
 $tftBuildDirectory = Join-Path $projectRoot '.arduino\build\tft-test'
 
 function Invoke-ArduinoCli {
@@ -223,6 +227,35 @@ try {
     $devicePort = Resolve-DevicePort
     Build-Sketch -Sketch $biosysDirectory -OutputDirectory $biosysBuildDirectory
     Upload-Build -DevicePort $devicePort -InputDirectory $biosysBuildDirectory
+  }
+  'biosys-compare-build' {
+    Build-Sketch -Sketch $biosysDirectory -OutputDirectory $biosysCompareBuildDirectory -Defines '-DBIO_COMPARE_MODE=1 -DBIO_RESEARCH_MODE=0 -DBIO_REPLAY_MODE=0'
+    # Local build receipt: upload verifies these files without recompiling while BOOT is held.
+    $receiptFiles = @()
+    $receiptFiles += @(Get-ChildItem -LiteralPath $biosysDirectory -File | Where-Object { $_.Extension -in '.ino', '.h', '.cpp' })
+    $receiptFiles += @(Get-ChildItem -LiteralPath $biosysCompareBuildDirectory -File -Filter '*.bin')
+    $receipt = @($receiptFiles | ForEach-Object {
+      [ordered]@{ path = $_.FullName; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+    })
+    $receiptPath = Join-Path $biosysCompareBuildDirectory 'HRPAIR_BUILD.json'
+    [IO.File]::WriteAllText($receiptPath, (ConvertTo-Json -InputObject $receipt -Depth 3), [Text.UTF8Encoding]::new($false))
+  }
+  'biosys-compare-upload' {
+    Assert-DeviceConfigured -ConfigPath (Join-Path $biosysDirectory 'vitalwatch_config.h')
+    $receiptPath = Join-Path $biosysCompareBuildDirectory 'HRPAIR_BUILD.json'
+    if (-not (Test-Path -LiteralPath $receiptPath)) { throw 'Primero compila con biosys-compare-build.' }
+    # Windows PowerShell 5.1 emits a JSON array as one pipeline object.
+    # Direct assignment preserves its entries instead of nesting the array.
+    $receipt = Get-Content -Raw -LiteralPath $receiptPath | ConvertFrom-Json
+    $mainBin = Join-Path $biosysCompareBuildDirectory ($biosysSketchName + '.ino.bin')
+    if (-not ($receipt | Where-Object { $_.path -eq $mainBin })) { throw 'Recibo sin binario principal.' }
+    foreach ($entry in $receipt) {
+      if (-not (Test-Path -LiteralPath $entry.path) -or (Get-FileHash -LiteralPath $entry.path -Algorithm SHA256).Hash -ne $entry.sha256) {
+        throw 'Cambio una fuente o un binario desde la compilacion HRPAIR. Vuelve a compilar.'
+      }
+    }
+    $devicePort = Resolve-DevicePort
+    Upload-Build -DevicePort $devicePort -InputDirectory $biosysCompareBuildDirectory
   }
   'biosys-research-build' {
     Build-Sketch -Sketch $biosysDirectory -OutputDirectory $biosysResearchBuildDirectory -Defines '-DBIO_RESEARCH_MODE=1'

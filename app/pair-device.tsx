@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { VitalWatchLogo } from '@/components/vitalwatch-logo';
 import { appColors } from '@/constants/vitalwatch';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -27,7 +28,7 @@ export default function PairDeviceScreen() {
     <View style={styles.screen}>
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.appName}>VitalWatch</Text>
+          <VitalWatchLogo compact />
           <Text style={styles.title}>Vincular pulsera</Text>
           <Text style={styles.subtitle}>
             Usa el codigo del dispositivo y el codigo privado entregado con la pulsera.

@@ -1,5 +1,6 @@
 import { DeviceAlertState, DeviceDisplayView } from '@/constants/vitalwatch';
 import { supabase } from '@/lib/supabase';
+import { isRecentValidMeasurement } from '@/lib/vitalwatch-readings';
 
 export type DashboardEvent = {
   contactId: number | null;
@@ -89,8 +90,7 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
       .select('heart_rate, spo2, battery_level, impact_value, recorded_at')
       .eq('device_id', deviceId)
       .order('recorded_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(20),
     supabase
       .from('device_events')
       .select('id, type, severity, message, event_time, contact_id')
@@ -107,7 +107,19 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
     throw new Error(`No se pudo leer device_events: ${eventsResult.error.message}`);
   }
 
-  const reading = readingResult.data;
+  const readings = readingResult.data ?? [];
+  const reading = readings[0] ?? null;
+  const nowMs = Date.now();
+  const heartRateReading = readings.find(
+    (item) =>
+      toOptionalNumber(item.heart_rate) !== null &&
+      isRecentValidMeasurement(item.recorded_at, nowMs)
+  );
+  const oxygenReading = readings.find(
+    (item) =>
+      toOptionalNumber(item.spo2) !== null &&
+      isRecentValidMeasurement(item.recorded_at, nowMs)
+  );
 
   return {
     user: {
@@ -131,8 +143,9 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
     },
     latestReading: reading
       ? {
-          heartRate: toOptionalNumber(reading.heart_rate),
-          oxygen: toOptionalNumber(reading.spo2),
+          // Una fila posterior con null no borra una medicion real reciente.
+          heartRate: toOptionalNumber(heartRateReading?.heart_rate),
+          oxygen: toOptionalNumber(oxygenReading?.spo2),
           battery: toOptionalNumber(reading.battery_level),
           impact: toOptionalNumber(reading.impact_value),
           recordedAt: reading.recorded_at,

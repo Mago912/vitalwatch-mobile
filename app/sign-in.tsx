@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { VitalWatchLogo } from '@/components/vitalwatch-logo';
 import { appColors } from '@/constants/vitalwatch';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -40,7 +41,7 @@ export default function SignInScreen() {
       style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.brandBlock}>
-          <Text style={styles.appName}>VitalWatch</Text>
+          <VitalWatchLogo />
           <Text style={styles.title}>Iniciar sesion</Text>
           <Text style={styles.subtitle}>Acceso seguro para familiares y responsables.</Text>
         </View>

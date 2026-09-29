@@ -72,4 +72,26 @@ Invoke-ArduinoCli @(
   'SparkFun MAX3010x Pulse and Proximity Sensor Library@1.1.2'
 )
 
+# La biblioteca original conserva solo 4 muestras en RAM. VitalWatch genera
+# datos a ~25 Hz y una operacion breve de red/TFT puede durar mas de 120 ms,
+# por lo que ese valor provoca perdidas. 32 posiciones cuestan pocos cientos
+# de bytes y permiten vaciar el FIFO sin alterar la frecuencia del sensor.
+$max3010xHeader = Join-Path $arduinoDirectory (
+  'user\libraries\SparkFun_MAX3010x_Pulse_and_Proximity_Sensor_Library\src\MAX30105.h'
+)
+if (-not (Test-Path -LiteralPath $max3010xHeader)) {
+  throw 'No se encontro MAX30105.h despues de instalar la biblioteca SparkFun.'
+}
+
+$max3010xContent = Get-Content -Raw -LiteralPath $max3010xHeader
+$max3010xContent = $max3010xContent -replace (
+  '#define\s+STORAGE_SIZE\s+4[^\r\n]*',
+  '#define STORAGE_SIZE 32 // VitalWatch: absorbe pausas breves de red/TFT sin perder PPG.'
+)
+if ($max3010xContent -notmatch '#define\s+STORAGE_SIZE\s+32') {
+  throw 'No se pudo ampliar STORAGE_SIZE de la biblioteca MAX3010x.'
+}
+[System.IO.File]::WriteAllText($max3010xHeader, $max3010xContent, $utf8WithoutBom)
+Write-Host 'Buffer MAX3010x ajustado a 32 muestras para VitalWatch.'
+
 Write-Host 'Entorno Arduino listo. Ejecuta npm run firmware:build para comprobarlo.'

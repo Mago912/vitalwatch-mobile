@@ -16,7 +16,7 @@ if ([string]::IsNullOrWhiteSpace($safeLabel)) {
 }
 
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$outputDirectory = Join-Path $projectRoot 'measurements\biosys-1.0.20'
+$outputDirectory = Join-Path $projectRoot 'measurements\biosys-1.0.21'
 $csvPath = Join-Path $outputDirectory "$timestamp-$safeLabel.csv"
 $metadataPath = Join-Path $outputDirectory "$timestamp-$safeLabel.json"
 $csvHeader = 'type,session_id,sample_index,sample_time_us,processing_time_us,red_raw,ir_raw,ir_dc,ir_ac,ir_filtered,peak_custom,peak_sparkfun,peak_accepted,ibi_ms,bpm_instant,bpm_robust,hr_status,ppg_quality,ppg_quality_flags,spo2_result,spo2_status,spo2_quality,led_amplitude,sparkfun_check_count,sparkfun_available,hw_fifo_read_ptr,hw_fifo_write_ptr,hw_fifo_overflow,suspected_drops,missing_samples,mpu_time_us,ax_g,ay_g,az_g,acc_mag_g,gx_rad_s,gy_rad_s,gz_rad_s,gyro_mag_rad_s,mpu_window_peak_g,mpu_window_delta_g,mpu_window_gyro_rad_s,mpu_window_samples,mpu_dt_us,mpu_saturated,mpu_missed_deadlines,ppg_mod_ir_pct,ppg_mod_red_pct,ppg_ratio_r,spo2_maxim,spo2_maxim_valid,spo2_custom_candidate,maxim_hr,maxim_hr_valid,measurement_state,loop_last_us,loop_max_us,display_render_us,i2c_failures,red_prominence,red_threshold,red_snr,red_candidate,ir_prominence,ir_threshold,ir_snr,ir_candidate,peak_fused,detector_state,quarantine_remaining_ms,synchronized_count'
@@ -93,7 +93,7 @@ try {
 }
 
 $metadata = [ordered]@{
-  firmware = 'BIOSYS 1.0.20'
+  firmware = 'BIOSYS 1.0.21'
   mode = 'BIO_RESEARCH_MODE=1'
   label = $Label
   port = $Port

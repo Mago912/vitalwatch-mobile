@@ -1,6 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { VirtualTft } from '@/components/virtual-tft';
+import { VitalWatchLogo } from '@/components/vitalwatch-logo';
 import {
   appColors,
   DeviceDisplayView,
@@ -36,7 +37,7 @@ export default function WatchScreen() {
       style={styles.screen}
       contentContainerStyle={styles.content}>
       <View>
-        <Text style={styles.appName}>VitalWatch</Text>
+        <VitalWatchLogo compact />
         <Text style={styles.title}>Control de pulsera</Text>
         <Text style={styles.subtitle}>
           Usa el mismo menu de la TFT aunque la pantalla fisica este apagada.

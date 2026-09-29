@@ -4,6 +4,7 @@ import {
   getRemoteReadingStatus,
   getRemoteStatus,
   getTrend,
+  isRecentValidMeasurement,
   readRemoteMeasurements,
   REMOTE_COMMUNICATION_MAX_AGE_MS,
   REMOTE_READING_MAX_AGE_MS,
@@ -79,4 +80,11 @@ test('la antiguedad distingue lectura actual, demorada y pulsera sin comunicacio
     getRemoteReadingStatus(new Date(now - REMOTE_COMMUNICATION_MAX_AGE_MS - 1).toISOString(), now),
     'Sin comunicacion'
   );
+});
+
+test('una medicion valida reciente sobrevive a filas posteriores sin ese signo', () => {
+  const now = Date.parse('2026-09-22T03:00:00.000Z');
+  assert.equal(isRecentValidMeasurement('2026-09-22T02:59:10.000Z', now), true);
+  assert.equal(isRecentValidMeasurement('2026-09-22T02:58:40.000Z', now), false);
+  assert.equal(isRecentValidMeasurement(null, now), false);
 });

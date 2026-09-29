@@ -73,13 +73,30 @@ La evidencia está en `measurements/biosys-1.0.20/replay-results.json`.
 
 ## Validación física obligatoria
 
-Estado actual: **REPLAY APROBADO; PRODUCTO Y MUÑECA PENDIENTES**.
+Estado actual: **REPLAY Y PRODUCTO INSTALADO; MUÑECA PENDIENTE**.
 
-1. Instalar el producto y confirmar identidad y MAX30102.
-2. Registrar al menos 120 segundos con el sensor apoyado en la muñeca quieta.
-3. Registrar una prueba separada con movimiento deliberado.
-4. Confirmar cero pérdidas y ausencia de resultados válidos durante movimiento.
-5. Exigir un tramo `VALIDA` continuo de al menos 10 segundos en reposo.
+El perfil normal se escribió al 100 % por `COM3` y `esptool` verificó el hash.
+El diagnóstico nuevo confirmó MAX30102 `PART_ID=0x15`, salida oficial separada
+de MAXIM y cero pérdidas.
+
+Muñeca quieta, toma 1: **FAIL de montaje**. Solo 72 de 139 diagnósticos limpios
+mantuvieron contacto y hubo cinco inicios de contacto independientes, 28
+transitorios ópticos y 27 diagnósticos con movimiento. Los niveles oscilaron
+entre ausencia de contacto y casi saturación. El firmware no publicó `VALIDA`.
+Se repetirá con el sensor sujeto antes de iniciar la captura, sin cambiar
+umbrales.
+
+Antebrazo quieto, toma 2: **contacto estable, pero FC no validada**. El perfil
+de investigación registró 3.000 muestras a 25 Hz sin pérdidas ni movimiento
+detectado: 87 candidatos rojos, 61 infrarrojos y solo dos pares sincronizados.
+La causa principal fue `QR_CHANNEL_MISMATCH`. La SpO2 experimental visible no
+constituye validación de exactitud. Datos en
+`measurements/biosys-1.0.20/20260926-125818-antebrazo-reposo-2.csv`.
+
+1. Repetir al menos 120 segundos con el sensor sujeto a la muñeca quieta.
+2. Registrar una prueba separada con movimiento deliberado.
+3. Confirmar cero pérdidas y ausencia de resultados válidos durante movimiento.
+4. Exigir un tramo `VALIDA` continuo de al menos 10 segundos en reposo.
 
 Sin un pulsómetro u oxímetro de referencia no se evaluará exactitud. Ningún
 resultado constituye validación clínica, diagnóstico ni garantía médica.

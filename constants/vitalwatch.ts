@@ -6,9 +6,9 @@ export type WatchStatus =
   | 'Caida detectada'
   | 'Medicacion pendiente';
 
-export const targetFirmwareVersion = 'BIOSYS 1.0.7';
-export const targetSystemVersion = 'SYS 0.9.7';
-export const targetBiomedicalVersion = 'BIO 0.6.3';
+export const targetFirmwareVersion = 'BIOSYS 1.0.14';
+export const targetSystemVersion = 'SYS 0.9.9';
+export const targetBiomedicalVersion = 'BIO 0.6.8';
 
 export type EventItem = {
   id: string;
